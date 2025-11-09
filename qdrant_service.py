@@ -2,17 +2,44 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from typing import List, Dict, Any
 import uuid
+import logging
+import time
+from datetime import datetime
 from config import Config
 from models import BookPayload, BookVector
 
+# Setup logger
+logger = logging.getLogger(__name__)
+
 class QdrantService:
-    def __init__(self):
+    def __init__(self, max_retries=5, retry_delay=2):
+        logger.info(f"[QDRANT] Khởi tạo QdrantService")
+        logger.info(f"[QDRANT] URL: {Config.QDRANT_URL}")
+        logger.info(f"[QDRANT] Collection: {Config.COLLECTION_NAME}")
+        
+        # Initialize client with check_compatibility=False to avoid version check warnings
         self.client = QdrantClient(
             url=Config.QDRANT_URL,
-            api_key=Config.QDRANT_API_KEY
+            api_key=(Config.QDRANT_API_KEY or None),
+            check_compatibility=False
         )
         self.collection_name = Config.COLLECTION_NAME
-        self._ensure_collection_exists()
+        
+        # Retry connection with exponential backoff
+        for attempt in range(max_retries):
+            try:
+                self._ensure_collection_exists()
+                logger.info(f"[QDRANT] ✅ Kết nối thành công đến Qdrant")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    logger.warning(f"[QDRANT] ⚠️ Lỗi kết nối (lần thử {attempt + 1}/{max_retries}): {str(e)}")
+                    logger.info(f"[QDRANT] Đợi {wait_time}s trước khi thử lại...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error(f"[QDRANT] ❌ Không thể kết nối đến Qdrant sau {max_retries} lần thử")
+                    raise
     
     def _ensure_collection_exists(self):
         """
@@ -23,17 +50,21 @@ class QdrantService:
             collection_names = [col.name for col in collections.collections]
             
             if self.collection_name not in collection_names:
-                # Create collection with 1024 dimensions (multilingual-e5-large)
+                # Create collection with 1024 dimensions for two named vectors
+                logger.info(f"[QDRANT] Đang tạo collection: {self.collection_name}")
+                logger.info(f"[QDRANT] Named vectors: summary (1024 dim), content (1024 dim)")
                 self.client.create_collection(
                     collection_name=self.collection_name,
-                    vectors_config=VectorParams(
-                        size=1024,
-                        distance=Distance.COSINE
-                    )
+                    vectors_config={
+                        "summary": VectorParams(size=1024, distance=Distance.COSINE),
+                        "content": VectorParams(size=1024, distance=Distance.COSINE),
+                    },
                 )
-                print(f"Created collection: {self.collection_name}")
+                logger.info(f"[QDRANT] ✅ Đã tạo collection: {self.collection_name}")
+            else:
+                logger.info(f"[QDRANT] Collection {self.collection_name} đã tồn tại")
         except Exception as e:
-            print(f"Error ensuring collection exists: {e}")
+            logger.error(f"[QDRANT] ❌ Lỗi khi tạo/kiểm tra collection: {str(e)}", exc_info=True)
             raise
     
     def add_book_vectors(self, book_vectors: List[BookVector]) -> List[str]:
@@ -76,7 +107,7 @@ class QdrantService:
         try:
             search_result = self.client.search(
                 collection_name=self.collection_name,
-                query_vector=query_vector,
+                query_vector={"name": "content", "vector": query_vector},
                 limit=limit,
                 score_threshold=score_threshold
             )
@@ -85,6 +116,31 @@ class QdrantService:
         except Exception as e:
             print(f"Error searching similar vectors: {e}")
             return []
+
+    def upsert_named_points(self, points: List[PointStruct]) -> List[str]:
+        """
+        Upsert points that use named vectors (e.g., summary, content)
+        """
+        if not points:
+            logger.warning("[QDRANT] Không có points để upsert")
+            return []
+        
+        logger.info(f"[QDRANT] Bắt đầu upsert {len(points)} points...")
+        start_time = datetime.now()
+        
+        try:
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=points,
+            )
+            elapsed = (datetime.now() - start_time).total_seconds()
+            point_ids = [str(p.id) for p in points]
+            logger.info(f"[QDRANT] ✅ Upsert thành công {len(points)} points ({elapsed:.2f}s)")
+            logger.debug(f"[QDRANT] Point IDs: {point_ids[:5]}{'...' if len(point_ids) > 5 else ''}")
+            return point_ids
+        except Exception as e:
+            logger.error(f"[QDRANT] ❌ Lỗi khi upsert points: {str(e)}", exc_info=True)
+            raise
     
     def get_all_vectors(self, limit: int = 10000):
         """

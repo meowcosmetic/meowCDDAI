@@ -48,31 +48,14 @@ class TextProcessor:
     
     def create_book_vectors(self, book_data: Dict[str, Any], paragraphs: List[str]) -> List[BookVector]:
         """
-        Create BookVector objects from book data and paragraphs
+        Create BookVector objects from book data and paragraphs (format mới)
         """
         book_vectors = []
         
         for i, paragraph in enumerate(paragraphs):
-            # Estimate page number (assuming ~300 words per page)
-            words = len(paragraph.split())
-            estimated_page = (i * 300) // 300 + 1
-            
-            # Estimate chapter (assuming ~10 pages per chapter)
-            estimated_chapter = (estimated_page - 1) // 10 + 1
-            
             payload = BookPayload(
                 book_id=book_data["book_id"],
-                title=book_data["title"],
-                author=book_data["author"],
-                year=book_data["year"],
-                chapter=estimated_chapter,
-                chapter_title=f"Chương {estimated_chapter}",
-                page=estimated_page,
-                paragraph_index=i + 1,
-                content=paragraph,
-                tags=book_data.get("tags", []),
-                language=book_data.get("language", "vi"),
-                category=book_data.get("category", "Lập trình")
+                content=paragraph
             )
             
             book_vector = BookVector(

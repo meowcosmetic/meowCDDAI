@@ -3,18 +3,10 @@ from typing import List, Optional
 import uuid
 
 class BookPayload(BaseModel):
+    """Payload cho format JSON upload mới"""
     book_id: str
-    title: str
-    author: str
-    year: int
-    chapter: int
-    chapter_title: str
-    page: int
-    paragraph_index: int
+    summary: Optional[str] = None
     content: str
-    tags: List[str] = []
-    language: str = "vi"
-    category: str = "Lập trình"
 
 class BookVector(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

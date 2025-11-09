@@ -1,4 +1,5 @@
-from typing import List
+from typing import List, Dict, Any
+import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -9,6 +10,18 @@ from .services import (
     hybrid_search_service,
     ensure_keyword_index_if_needed,
 )
+
+logger = logging.getLogger(__name__)
+
+def parse_payload(payload: Dict[str, Any]) -> BookPayload:
+    """
+    Parse payload từ Qdrant và convert sang BookPayload (format mới)
+    """
+    return BookPayload(
+        book_id=payload.get("book_id", "unknown"),
+        summary=payload.get("summary"),
+        content=payload.get("content", ""),
+    )
 
 
 router = APIRouter()
@@ -27,12 +40,13 @@ async def search_books(search_request: SearchRequest):
 
         responses: List[SearchResponse] = []
         for result in search_results:
+            payload = parse_payload(result.payload)
             response = SearchResponse(
                 id=result.id,
                 score=result.score,
                 embedding_score=result.score,
                 keyword_score=None,
-                payload=BookPayload(**result.payload),
+                payload=payload,
             )
             responses.append(response)
         return responses
@@ -56,7 +70,7 @@ async def search_keywords(search_request: SearchRequest):
         responses: List[SearchResponse] = []
         for doc_id, score in keyword_results:
             if doc_id in points_dict:
-                payload = BookPayload(**points_dict[doc_id].payload)
+                payload = parse_payload(points_dict[doc_id].payload)
                 response = SearchResponse(
                     id=doc_id,
                     score=score,
@@ -106,12 +120,13 @@ async def search_by_book_id(
         for point in filtered_points:
             score = 1.0
             if score >= score_threshold:
+                payload = parse_payload(point.payload)
                 response = SearchResponse(
                     id=point.id,
                     score=score,
                     embedding_score=score,
                     keyword_score=None,
-                    payload=BookPayload(**point.payload),
+                    payload=payload,
                 )
                 responses.append(response)
 
@@ -161,12 +176,13 @@ async def search_by_tags(
 
         responses: List[SearchResponse] = []
         for point, score in scored_points:
+            payload = parse_payload(point.payload)
             response = SearchResponse(
                 id=point.id,
                 score=score,
                 embedding_score=score,
                 keyword_score=None,
-                payload=BookPayload(**point.payload),
+                payload=payload,
             )
             responses.append(response)
 

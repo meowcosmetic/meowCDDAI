@@ -153,7 +153,12 @@ class HybridSearchService:
                 payload = None
                 for result in embedding_results:
                     if result.id == doc_id:
-                        payload = BookPayload(**result.payload)
+                        # Parse payload format mới
+                        payload = BookPayload(
+                            book_id=result.payload.get("book_id", "unknown"),
+                            summary=result.payload.get("summary"),
+                            content=result.payload.get("content", ""),
+                        )
                         break
                 
                 if payload:
