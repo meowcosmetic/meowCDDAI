@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from text_embeding import upload_router, search_router, admin_router, post_router, description_router, question_router
+from text_embeding import upload_router, search_router, admin_router, post_router, description_router, question_router, csv_router, question_csv_router
 
 
 app = FastAPI(
@@ -27,6 +27,8 @@ app.include_router(search_router)
 app.include_router(post_router)
 app.include_router(description_router)
 app.include_router(question_router)
+app.include_router(csv_router)
+app.include_router(question_csv_router)
 
 
 if __name__ == "__main__":
