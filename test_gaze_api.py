@@ -54,7 +54,8 @@ def test_gaze_api(video_path: str, target_type: str = "camera"):
     print(f"🌐 API URL: {API_URL}")
     if SHOW_VIDEO:
         print(f"📺 Video Display: ENABLED (sẽ hiển thị video real-time)")
-        print("   → Nhấn 'q' trong cửa sổ video để tắt hiển thị")
+        print("   → Nhấn 'q' hoặc ESC trong cửa sổ video để dừng")
+        print("   → Nhấn 'p' hoặc Space để tạm dừng/tiếp tục")
     else:
         print(f"📺 Video Display: DISABLED")
     print("-" * 60)

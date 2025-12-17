@@ -56,7 +56,7 @@ async def analyze_gaze_camera(
         cap.set(cv2.CAP_PROP_FPS, 30)
         
         logger.info(f"[Gaze] Bắt đầu phân tích camera (ID: {camera_id}, max_duration: {max_duration}s)")
-        logger.info("[Gaze] Nhấn 'q' trong cửa sổ video để dừng phân tích")
+        logger.info("[Gaze] Điều khiển cửa sổ video: 'q'/ESC = dừng, 'p'/Space = tạm dừng/tiếp tục")
         
         # Lazy import để tránh circular dependency
         process_gaze_analysis = _get_process_gaze_analysis()
@@ -123,6 +123,8 @@ async def analyze_gaze(
             raise HTTPException(status_code=400, detail="Không thể đọc video file")
         
         logger.info("[Gaze] Bắt đầu phân tích video file")
+        if show_video_bool:
+            logger.info("[Gaze] Điều khiển cửa sổ video: 'q'/ESC = dừng, 'p'/Space = tạm dừng/tiếp tục")
         
         # Lazy import để tránh circular dependency
         process_gaze_analysis = _get_process_gaze_analysis()

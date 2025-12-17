@@ -148,8 +148,15 @@ def draw_annotations(
                 cv2.putText(annotated_frame, "Adult", (int(x), int(y) - 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
     
-    # Vẽ gaze direction arrow
-    if child_face is not None and gaze_dir is not None:
+    # Vẽ gaze direction vector - sử dụng gaze_x và gaze_y nếu có
+    # Luôn vẽ mũi tên nếu có child_face hoặc gaze_dir
+    should_draw_gaze = False
+    face_center_x = w // 2
+    face_center_y = h // 2
+    
+    if child_face is not None:
+        should_draw_gaze = True
+        # Tìm tâm của khuôn mặt trẻ
         if isinstance(child_face, (list, tuple)) and len(child_face) >= 4:
             x, y, w_face, h_face = child_face[:4]
             face_center_x = int(x + w_face / 2)
@@ -160,35 +167,124 @@ def draw_annotations(
                 x, y, w_face, h_face = bbox[:4]
                 face_center_x = int(x + w_face / 2)
                 face_center_y = int(y + h_face / 2)
-            else:
-                face_center_x = w // 2
-                face_center_y = h // 2
-        else:
-            face_center_x = w // 2
-            face_center_y = h // 2
+    
+    # Nếu không có child_face nhưng có gaze_dir, vẫn vẽ mũi tên ở giữa màn hình
+    if not should_draw_gaze and gaze_dir is not None:
+        should_draw_gaze = True
+    
+    # Vẽ gaze vector dựa trên gaze_x và gaze_y (nếu có)
+    if should_draw_gaze and gaze_x is not None and gaze_y is not None:
+        """
+        GIẢI THÍCH VỀ GAZE MAGNITUDE:
         
-        # Tính vị trí mũi tên dựa trên gaze direction
-        arrow_length = 50
+        1. gaze_x và gaze_y là gì?
+           - Đây là offset của con ngươi (iris) so với TÂM MẮT
+           - Công thức: gaze_x = (iris_x - eye_center_x)
+           - Giá trị normalized trong hệ tọa độ MediaPipe (0.0-1.0)
+        
+        2. Tại sao gaze_magnitude lại NHỎ?
+           - Con ngươi chỉ di chuyển một khoảng RẤT NHỎ trong mắt
+           - Khi nhìn thẳng: iris ở giữa mắt → offset ≈ 0.0
+           - Khi nhìn sang trái/phải: iris chỉ di chuyển ~1-5% chiều rộng mắt
+           - Trong hệ normalized (0.0-1.0), offset thường chỉ từ -0.05 đến 0.05
+           - Vậy nên gaze_magnitude thường rất nhỏ: 0.001 - 0.05
+        
+        3. Gaze magnitude có phải hướng nhìn không?
+           - CÓ, nhưng chỉ là hướng TƯƠNG ĐỐI trong mắt
+           - Không phải hướng nhìn tuyệt đối trong không gian 3D
+           - Chỉ cho biết con ngươi đang ở đâu trong mắt:
+             * gaze_x > 0: nhìn sang phải (iris ở bên phải tâm mắt)
+             * gaze_x < 0: nhìn sang trái (iris ở bên trái tâm mắt)
+             * gaze_y < 0: nhìn lên trên (iris ở trên tâm mắt)
+             * gaze_y > 0: nhìn xuống dưới (iris ở dưới tâm mắt)
+        
+        4. Tại sao cần nhân lên?
+           - Để hiển thị mũi tên rõ ràng trên màn hình
+           - Magnitude nhỏ → mũi tên ngắn → khó nhìn thấy
+           - Nhân lên 200 lần để phóng đại và dễ quan sát
+        """
+        
+        # Tính độ dài thực tế của vector gaze (magnitude)
+        gaze_magnitude = np.sqrt(gaze_x**2 + gaze_y**2)
+        
+        # Base length cho mũi tên (30% của kích thước nhỏ hơn - nhỏ hơn để tinh tế hơn)
+        base_length = min(w, h) * 0.3
+        
+        # Độ dài tối thiểu để mũi tên luôn nhìn thấy được (10% frame)
+        min_arrow_length = min(w, h) * 0.1
+        
+        if gaze_magnitude < 0.01:
+            # Nếu gaze quá nhỏ (< 0.01), nhân lên 200 lần để phóng đại
+            # Điều này giúp hiển thị rõ ràng ngay cả khi nhìn thẳng
+            amplified_gaze_x = gaze_x * 200
+            amplified_gaze_y = gaze_y * 200
+            amplified_magnitude = np.sqrt(amplified_gaze_x**2 + amplified_gaze_y**2)
+            
+            # Normalize để giữ hướng nhưng có độ dài hợp lý
+            if amplified_magnitude > 0:
+                normalized_gaze_x = amplified_gaze_x / amplified_magnitude
+                normalized_gaze_y = amplified_gaze_y / amplified_magnitude
+            else:
+                # Nếu vẫn bằng 0 sau khi nhân, vẽ mũi tên nhỏ lên trên
+                normalized_gaze_x = 0
+                normalized_gaze_y = -1
+            
+            # Độ dài mũi tên từ 15% đến 40% frame
+            arrow_length = max(min_arrow_length, base_length * min(1.0, amplified_magnitude / 10))
+            
+            end_x = int(face_center_x + normalized_gaze_x * arrow_length)
+            end_y = int(face_center_y + normalized_gaze_y * arrow_length)
+        else:
+            # Nếu magnitude đủ lớn (>= 0.01), sử dụng giá trị gốc nhưng scale hợp lý
+            # Normalize để giữ hướng
+            normalized_gaze_x = gaze_x / gaze_magnitude if gaze_magnitude > 0 else 0
+            normalized_gaze_y = gaze_y / gaze_magnitude if gaze_magnitude > 0 else 0
+            
+            # Độ dài mũi tên tỷ lệ với magnitude nhưng có minimum
+            # Scale magnitude để mũi tên có độ dài từ 15% đến 40% frame
+            arrow_length = max(min_arrow_length, base_length * min(1.0, gaze_magnitude * 15))
+            
+            end_x = int(face_center_x + normalized_gaze_x * arrow_length)
+            end_y = int(face_center_y + normalized_gaze_y * arrow_length)
+        
+        # Vẽ mũi tên gaze vector (màu vàng, mỏng hơn để giống các annotation khác)
+        cv2.arrowedLine(annotated_frame, (face_center_x, face_center_y),
+                       (end_x, end_y), (0, 255, 255), 2, tipLength=0.2, line_type=cv2.LINE_AA)
+        
+        # Vẽ điểm bắt đầu (mắt) - vòng tròn nhỏ hơn
+        cv2.circle(annotated_frame, (face_center_x, face_center_y), 3, (0, 255, 255), -1)
+        
+        # Hiển thị thông tin gaze (font nhỏ hơn)
+        gaze_info = f"Gaze: ({gaze_x:.3f}, {gaze_y:.3f})"
+        if gaze_dir:
+            gaze_info += f" [{gaze_dir}]"
+        cv2.putText(annotated_frame, gaze_info, (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    elif should_draw_gaze and gaze_dir is not None:
+        # Fallback: sử dụng gaze_dir nếu không có gaze_x/gaze_y
+        arrow_length = min(w, h) * 0.25  # Tăng độ dài mũi tên
         if gaze_dir == "left":
-            end_x = face_center_x - arrow_length
+            end_x = face_center_x - int(arrow_length)
             end_y = face_center_y
         elif gaze_dir == "right":
-            end_x = face_center_x + arrow_length
+            end_x = face_center_x + int(arrow_length)
             end_y = face_center_y
         elif gaze_dir == "up":
             end_x = face_center_x
-            end_y = face_center_y - arrow_length
+            end_y = face_center_y - int(arrow_length)
         elif gaze_dir == "down":
             end_x = face_center_x
-            end_y = face_center_y + arrow_length
+            end_y = face_center_y + int(arrow_length)
         else:  # center
+            # Vẽ mũi tên nhỏ lên trên để chỉ ra đang nhìn thẳng
             end_x = face_center_x
-            end_y = face_center_y
+            end_y = face_center_y - int(arrow_length * 0.3)
         
         cv2.arrowedLine(annotated_frame, (face_center_x, face_center_y),
-                       (end_x, end_y), (0, 255, 255), 3, tipLength=0.3)
+                       (end_x, end_y), (0, 255, 255), 2, tipLength=0.2, line_type=cv2.LINE_AA)
+        cv2.circle(annotated_frame, (face_center_x, face_center_y), 3, (0, 255, 255), -1)
         cv2.putText(annotated_frame, f"Gaze: {gaze_dir}", (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
     
     # Vẽ detected objects - TẤT CẢ objects, không chỉ sách
     if detected_objects:

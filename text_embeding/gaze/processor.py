@@ -136,6 +136,22 @@ def process_gaze_analysis(
     if fps <= 0:
         fps = 30.0  # Default FPS
     
+    # Giới hạn kích thước màn hình để tăng tốc độ xử lý
+    MAX_DISPLAY_WIDTH = 1280
+    MAX_DISPLAY_HEIGHT = 720
+    original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # Tính scale để fit vào max size
+    scale_w = MAX_DISPLAY_WIDTH / original_width if original_width > MAX_DISPLAY_WIDTH else 1.0
+    scale_h = MAX_DISPLAY_HEIGHT / original_height if original_height > MAX_DISPLAY_HEIGHT else 1.0
+    scale = min(scale_w, scale_h, 1.0)  # Không scale up, chỉ scale down
+    
+    display_width = int(original_width * scale)
+    display_height = int(original_height * scale)
+    
+    logger.info(f"[Gaze] Frame size: {original_width}x{original_height} -> {display_width}x{display_height} (scale: {scale:.2f})")
+    
     if GAZE_TRACKING_MODULES_AVAILABLE and config:
         try:
             # Initialize GPU Manager
@@ -192,16 +208,62 @@ def process_gaze_analysis(
     start_time = time.time()
     last_frame_time = start_time
     
+    # Video display controls (chỉ áp dụng khi show_video=True)
+    paused = False
+    last_display_frame: Optional[np.ndarray] = None
+    
+    def _overlay_pause_hint(img: np.ndarray) -> np.ndarray:
+        """Vẽ hint PAUSED lên frame (in-place)"""
+        try:
+            h_img, w_img = img.shape[:2]
+            text = "PAUSED - nhan 'p' hoac Space de tiep tuc | 'q'/ESC de thoat"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            scale = 0.7
+            thickness = 2
+            (tw, th), _ = cv2.getTextSize(text, font, scale, thickness)
+            x = max(10, (w_img - tw) // 2)
+            y = max(30, th + 20)
+            # nền tối để dễ đọc
+            cv2.rectangle(img, (x - 10, y - th - 10), (x + tw + 10, y + 10), (0, 0, 0), -1)
+            cv2.putText(img, text, (x, y), font, scale, (0, 255, 255), thickness, cv2.LINE_AA)
+        except Exception:
+            pass
+        return img
+    
     # Initialize MediaPipe Face Mesh
+    # Các tham số để cải thiện độ chính xác gaze estimation:
+    # - refine_landmarks=True: Bật refinement landmarks (bao gồm iris landmarks) - QUAN TRỌNG cho gaze
+    # - min_detection_confidence: Ngưỡng phát hiện khuôn mặt (0.0-1.0), cao hơn = chính xác hơn nhưng có thể miss một số frame
+    # - min_tracking_confidence: Ngưỡng tracking (0.0-1.0), cao hơn = ổn định hơn nhưng có thể mất track khi chuyển động nhanh
+    # - static_image_mode=False: Video mode (tối ưu cho real-time)
+    # - max_num_faces=2: Tối đa 2 khuôn mặt (child + adult)
     with mp_face_mesh.FaceMesh(
         static_image_mode=False,
         max_num_faces=2,
-        refine_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
+        refine_landmarks=True,  # ✅ QUAN TRỌNG: Bật để có iris landmarks chính xác
+        min_detection_confidence=0.6,  # Tăng từ 0.5 → 0.6 để chính xác hơn
+        min_tracking_confidence=0.6  # Tăng từ 0.5 → 0.6 để ổn định hơn
     ) as face_mesh:
         
         while cap.isOpened():
+            # Nếu đang pause và có video window, chỉ hiển thị lại frame cũ + bắt phím
+            if show_video and paused and last_display_frame is not None:
+                try:
+                    paused_frame = _overlay_pause_hint(last_display_frame.copy())
+                    cv2.imshow('Gaze Analysis', paused_frame)
+                    key = cv2.waitKey(30) & 0xFF
+                    # Toggle pause
+                    if key == ord('p') or key == 32:  # 32 = Space
+                        paused = False
+                    # Quit
+                    elif key == ord('q') or key == 27:
+                        logger.info("[Gaze] Người dùng nhấn 'q' hoặc ESC để dừng")
+                        break
+                except Exception:
+                    # Nếu có lỗi UI, thoát pause và tiếp tục xử lý bình thường
+                    paused = False
+                continue
+            
             ret, frame = cap.read()
             if not ret:
                 break
@@ -217,11 +279,18 @@ def process_gaze_analysis(
             
             # Key press check sẽ được thực hiện sau khi hiển thị frame
             
-            # Convert BGR to RGB
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Resize frame nếu cần để giới hạn kích thước màn hình
+            if scale < 1.0:
+                frame_resized = cv2.resize(frame, (display_width, display_height))
+            else:
+                frame_resized = frame.copy()
+            
+            # Convert BGR to RGB cho MediaPipe
+            rgb_frame = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
             results = face_mesh.process(rgb_frame)
             
-            h, w = frame.shape[:2]
+            # Sử dụng kích thước đã resize cho processing
+            h, w = frame_resized.shape[:2]
             child_face_landmarks = None
             adult_face_landmarks = None
             child_face_bbox = None
@@ -244,8 +313,9 @@ def process_gaze_analysis(
                     detection_interval = getattr(config, 'OBJECT_DETECTION_INTERVAL', 5) if config else 5
                     if frame_count % detection_interval == 0 or frame_count == 1:
                         # Detect objects mỗi N frames (mặc định mỗi 5 frames)
+                        # Sử dụng frame_resized để đảm bảo tọa độ nhất quán với face detection
                         tracked_objects = object_detector.detect(
-                            frame=frame, 
+                            frame=frame_resized, 
                             prioritize_book=True,
                             frame_count=frame_count
                         )
@@ -472,13 +542,26 @@ def process_gaze_analysis(
                     child_face_data = None
                     if child_face_bbox:
                         child_face_data = {'bbox': child_face_bbox}
+                    elif child_face_landmarks:
+                        # Nếu có landmarks nhưng không có bbox, tạo bbox từ landmarks
+                        try:
+                            h_frame, w_frame = frame_resized.shape[:2]
+                            x_coords = [lm.x * w_frame for lm in child_face_landmarks.landmark]
+                            y_coords = [lm.y * h_frame for lm in child_face_landmarks.landmark]
+                            x_min, x_max = int(min(x_coords)), int(max(x_coords))
+                            y_min, y_max = int(min(y_coords)), int(max(y_coords))
+                            child_face_data = {'bbox': [x_min, y_min, x_max - x_min, y_max - y_min]}
+                        except:
+                            pass
                     
                     adult_face_data = None
                     if adult_face_bbox:
                         adult_face_data = {'bbox': adult_face_bbox}
                     
+                    # Vẽ annotations trên frame đã resize
+                    # Luôn truyền gaze_x, gaze_y và gaze_dir để đảm bảo mũi tên được vẽ
                     annotated_frame = draw_annotations(
-                        frame=frame.copy(),
+                        frame=frame_resized.copy(),
                         child_face=child_face_data,
                         adult_face=adult_face_data,
                         gaze_dir=gaze_dir,
@@ -497,6 +580,7 @@ def process_gaze_analysis(
                         show_landmarks=True  # Show eye landmarks
                     )
                     cv2.imshow('Gaze Analysis', annotated_frame)
+                    last_display_frame = annotated_frame
                     # Wait key để hiển thị frame và check key press để dừng
                     if is_camera:
                         key = cv2.waitKey(1) & 0xFF
@@ -511,11 +595,15 @@ def process_gaze_analysis(
                     if key == ord('q') or key == 27:
                         logger.info("[Gaze] Người dùng nhấn 'q' hoặc ESC để dừng")
                         break
+                    # Toggle pause: 'p' hoặc Space
+                    if key == ord('p') or key == 32:
+                        paused = not paused
                 except Exception as e:
                     logger.warning(f"[Gaze] Error drawing annotations: {str(e)}")
                     import traceback
                     traceback.print_exc()
-                    cv2.imshow('Gaze Analysis', frame)
+                    cv2.imshow('Gaze Analysis', frame_resized)
+                    last_display_frame = frame_resized
                     # Wait key ngay cả khi có lỗi
                     if is_camera:
                         key = cv2.waitKey(1) & 0xFF
@@ -527,6 +615,9 @@ def process_gaze_analysis(
                     if key == ord('q') or key == 27:
                         logger.info("[Gaze] Người dùng nhấn 'q' hoặc ESC để dừng")
                         break
+                    # Toggle pause: 'p' hoặc Space
+                    if key == ord('p') or key == 32:
+                        paused = not paused
     
     # Calculate final statistics
     analyzed_duration = time.time() - start_time

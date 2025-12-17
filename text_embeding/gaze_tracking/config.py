@@ -196,6 +196,19 @@ class GazeConfig:
     # ========================================================================
     # OBJECT DETECTION - Phát hiện đối tượng
     # ========================================================================
+
+    CUSTOM_YOLO_WEIGHTS: str = ""
+    """
+    [NEW] Đường dẫn tới weights YOLO custom bạn train lại (Ultralytics .pt).
+
+    - Nếu set khác rỗng và file tồn tại: hệ thống sẽ ưu tiên dùng weights này để detect objects
+    - Nếu rỗng/không tồn tại: fallback về OID detector (yolov8{OID_MODEL_SIZE}-oidv7/oiv7)
+
+    Ví dụ (Windows):
+    - "C:\\Users\\Admin\\Desktop\\runs\\detect\\myvideo-finetune\\weights\\best.pt"
+
+    Khuyến nghị: train với classes nhỏ (book/pen/pencil...) để tốc độ nhanh và ổn định.
+    """
     
     OBJECT_DETECTION_INTERVAL: int = 5
     """
