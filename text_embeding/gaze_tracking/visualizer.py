@@ -59,33 +59,33 @@ def draw_annotations(
             LEFT_EYE_CENTER = 468  # Left iris center
             RIGHT_EYE_CENTER = 473  # Right iris center
             
-            # Vẽ left eye landmarks (màu xanh lá)
+            # Vẽ left eye landmarks (màu xanh lá) - nhỏ gọn hơn
             for idx in LEFT_EYE_INDICES:
                 if idx < len(face_landmarks.landmark):
                     lm = face_landmarks.landmark[idx]
                     x, y = int(lm.x * w), int(lm.y * h)
-                    cv2.circle(annotated_frame, (x, y), 2, (0, 255, 0), -1)  # Green dots
+                    cv2.circle(annotated_frame, (x, y), 1, (0, 255, 0), -1)  # Green dots (smaller)
             
-            # Vẽ right eye landmarks (màu xanh dương)
+            # Vẽ right eye landmarks (màu xanh dương) - nhỏ gọn hơn
             for idx in RIGHT_EYE_INDICES:
                 if idx < len(face_landmarks.landmark):
                     lm = face_landmarks.landmark[idx]
                     x, y = int(lm.x * w), int(lm.y * h)
-                    cv2.circle(annotated_frame, (x, y), 2, (255, 0, 0), -1)  # Blue dots
+                    cv2.circle(annotated_frame, (x, y), 1, (255, 0, 0), -1)  # Blue dots (smaller)
             
-            # Vẽ left eye center (iris) - màu vàng, lớn hơn
+            # Vẽ left eye center (iris) - màu vàng, nhỏ gọn hơn
             if LEFT_EYE_CENTER < len(face_landmarks.landmark):
                 lm = face_landmarks.landmark[LEFT_EYE_CENTER]
                 x, y = int(lm.x * w), int(lm.y * h)
-                cv2.circle(annotated_frame, (x, y), 4, (0, 255, 255), -1)  # Yellow, larger
-                cv2.putText(annotated_frame, "L", (x + 5, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
+                cv2.circle(annotated_frame, (x, y), 2, (0, 255, 255), -1)  # Yellow (smaller)
+                cv2.putText(annotated_frame, "L", (x + 4, y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
             
-            # Vẽ right eye center (iris) - màu vàng, lớn hơn
+            # Vẽ right eye center (iris) - màu vàng, nhỏ gọn hơn
             if RIGHT_EYE_CENTER < len(face_landmarks.landmark):
                 lm = face_landmarks.landmark[RIGHT_EYE_CENTER]
                 x, y = int(lm.x * w), int(lm.y * h)
-                cv2.circle(annotated_frame, (x, y), 4, (0, 255, 255), -1)  # Yellow, larger
-                cv2.putText(annotated_frame, "R", (x + 5, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
+                cv2.circle(annotated_frame, (x, y), 2, (0, 255, 255), -1)  # Yellow (smaller)
+                cv2.putText(annotated_frame, "R", (x + 4, y), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 255, 255), 1)
             
             # Vẽ outline của mắt (nối các điểm landmarks)
             # Left eye outline
@@ -433,7 +433,7 @@ def draw_annotations(
         cv2.putText(annotated_frame, gaze_text, (text_x, text_y),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)  # Cyan color
         
-        # Vẽ crosshair tại vị trí gaze trên frame (nếu có child_face)
+        # Vẽ crosshair tại vị trí gaze trên frame (chỉ khi có child_face)
         if child_face is not None:
             if isinstance(child_face, (list, tuple)) and len(child_face) >= 4:
                 x_face, y_face, w_face, h_face = child_face[:4]
@@ -448,43 +448,59 @@ def draw_annotations(
                 else:
                     face_center_x = w // 2
                     face_center_y = h // 2
+                    w_face, h_face = w * 0.3, h * 0.3
             else:
                 face_center_x = w // 2
                 face_center_y = h // 2
-            
-            # Tính vị trí gaze trên frame (từ normalized offset)
-            # gaze_x và gaze_y là offset từ face center, tính theo frame size
-            gaze_pixel_x = int(face_center_x + gaze_x * (w / 2))
-            gaze_pixel_y = int(face_center_y + gaze_y * (h / 2))
-            
+                w_face, h_face = w * 0.3, h * 0.3
+
+            # Tính vị trí gaze hiển thị trên frame (từ gaze_x/gaze_y)
+            # Lưu ý: gaze_x/gaze_y là offset đã chuẩn hoá theo KÍCH THƯỚC MẮT (không phải theo frame).
+            # Vì vậy khi vẽ, scale theo kích thước khuôn mặt để trực quan hơn và tránh “bắn” ra xa.
+            scale_x = max(40, int(w_face * 0.9))
+            scale_y = max(40, int(h_face * 0.9))
+
+            gaze_pixel_x = int(face_center_x + gaze_x * scale_x)
+            gaze_pixel_y = int(face_center_y + gaze_y * scale_y)
+
             # Đảm bảo trong frame bounds
             gaze_pixel_x = max(0, min(w - 1, gaze_pixel_x))
             gaze_pixel_y = max(0, min(h - 1, gaze_pixel_y))
-            
+
             # Vẽ crosshair (dấu +) tại vị trí gaze
             crosshair_size = 15
-            crosshair_color = (0, 255, 255)  # Cyan
+            # Điểm nhìn (crosshair) dùng màu khác để phân biệt với mũi tên gaze (màu vàng)
+            crosshair_color = (255, 0, 255)  # Magenta
             crosshair_thickness = 2
-            
+
             # Vẽ đường ngang
-            cv2.line(annotated_frame,
-                    (gaze_pixel_x - crosshair_size, gaze_pixel_y),
-                    (gaze_pixel_x + crosshair_size, gaze_pixel_y),
-                    crosshair_color, crosshair_thickness)
+            cv2.line(
+                annotated_frame,
+                (gaze_pixel_x - crosshair_size, gaze_pixel_y),
+                (gaze_pixel_x + crosshair_size, gaze_pixel_y),
+                crosshair_color,
+                crosshair_thickness,
+            )
             # Vẽ đường dọc
-            cv2.line(annotated_frame,
-                    (gaze_pixel_x, gaze_pixel_y - crosshair_size),
-                    (gaze_pixel_x, gaze_pixel_y + crosshair_size),
-                    crosshair_color, crosshair_thickness)
-            
+            cv2.line(
+                annotated_frame,
+                (gaze_pixel_x, gaze_pixel_y - crosshair_size),
+                (gaze_pixel_x, gaze_pixel_y + crosshair_size),
+                crosshair_color,
+                crosshair_thickness,
+            )
+
             # Vẽ điểm tròn tại vị trí gaze
             cv2.circle(annotated_frame, (gaze_pixel_x, gaze_pixel_y), 5, crosshair_color, -1)
-            
-            # Vẽ đường nối từ face center đến gaze position
-            cv2.line(annotated_frame,
-                    (face_center_x, face_center_y),
-                    (gaze_pixel_x, gaze_pixel_y),
-                    (255, 255, 0), 2)  # Yellow line
+
+            # Vẽ đường nối từ face center đến gaze position (cùng màu với điểm nhìn)
+            cv2.line(
+                annotated_frame,
+                (face_center_x, face_center_y),
+                (gaze_pixel_x, gaze_pixel_y),
+                crosshair_color,
+                2,
+            )  # Yellow line
     
     # Vẽ hướng quay đầu (head rotation) nếu có
     if child_face is not None and head_pose is not None:
@@ -539,12 +555,13 @@ def draw_annotations(
             pitch_ratio = np.clip(abs(pitch_deg) / max_angle, 0, 1)
             pitch_arrow_length = int(arrow_length_base * pitch_ratio)
             if abs(pitch_deg) > 2:  # Chỉ vẽ nếu quay đáng kể (>2 độ)
-                if pitch_deg < 0:  # Quay lên
-                    pitch_end_x = face_center_x
-                    pitch_end_y = face_center_y - pitch_arrow_length
-                else:  # Quay xuống
+                # Với cách tính pitch hiện tại trong processor, pitch âm thường tương ứng “cúi xuống”.
+                if pitch_deg < 0:  # Quay xuống
                     pitch_end_x = face_center_x
                     pitch_end_y = face_center_y + pitch_arrow_length
+                else:  # Quay lên
+                    pitch_end_x = face_center_x
+                    pitch_end_y = face_center_y - pitch_arrow_length
                 
                 # Vẽ arrow cho pitch (màu xanh lá)
                 cv2.arrowedLine(annotated_frame,

@@ -9,7 +9,7 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from fastapi import HTTPException
 from .models import GazeAnalysisResponse
-from .helpers import is_looking_at_object, calculate_book_focusing_score
+from .helpers import is_looking_at_object
 from .config import (
     GAZE_TRACKING_MODULES_AVAILABLE, MEDIAPIPE_AVAILABLE, mp_face_mesh,
     USE_GPU, GPU_AVAILABLE, draw_annotations,
@@ -29,7 +29,7 @@ LEFT_EYE_CENTER = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159,
 RIGHT_EYE_CENTER = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
 
 
-def _calculate_gaze_direction(gaze_x: float, gaze_y: float, threshold: float = 0.1) -> str:
+def _calculate_gaze_direction(gaze_x: float, gaze_y: float, threshold: float = 0.12) -> str:
     """
     Xác định hướng nhìn từ gaze offset
     
@@ -61,32 +61,48 @@ def _estimate_gaze_from_landmarks(face_landmarks, w: int, h: int) -> Tuple[float
     """
     try:
         landmark = face_landmarks.landmark
-        
-        # Left iris center
-        left_iris_x = sum(landmark[i].x for i in LEFT_IRIS) / len(LEFT_IRIS)
-        left_iris_y = sum(landmark[i].y for i in LEFT_IRIS) / len(LEFT_IRIS)
-        
-        # Right iris center
-        right_iris_x = sum(landmark[i].x for i in RIGHT_IRIS) / len(RIGHT_IRIS)
-        right_iris_y = sum(landmark[i].y for i in RIGHT_IRIS) / len(RIGHT_IRIS)
-        
-        # Eye centers
-        left_eye_center_x = sum(landmark[i].x for i in LEFT_EYE_CENTER) / len(LEFT_EYE_CENTER)
-        left_eye_center_y = sum(landmark[i].y for i in LEFT_EYE_CENTER) / len(LEFT_EYE_CENTER)
-        
-        right_eye_center_x = sum(landmark[i].x for i in RIGHT_EYE_CENTER) / len(RIGHT_EYE_CENTER)
-        right_eye_center_y = sum(landmark[i].y for i in RIGHT_EYE_CENTER) / len(RIGHT_EYE_CENTER)
-        
-        # Calculate gaze offset (normalized)
-        left_gaze_x = (left_iris_x - left_eye_center_x)
-        left_gaze_y = (left_iris_y - left_eye_center_y)
-        
-        right_gaze_x = (right_iris_x - right_eye_center_x)
-        right_gaze_y = (right_iris_y - right_eye_center_y)
-        
-        # Average gaze
-        gaze_x = (left_gaze_x + right_gaze_x) / 2
-        gaze_y = (left_gaze_y + right_gaze_y) / 2
+
+        # Dùng pupil landmarks (refine_landmarks=True) và các điểm ổn định (corners + top/bottom)
+        # để tránh trường hợp mí mắt sụp làm "tâm mắt" bị kéo lệch => đảo dấu khi nhìn lên/xuống.
+        LEFT_PUPIL = 468
+        RIGHT_PUPIL = 473
+        # Eye corners
+        L_CORNER_OUT = 33
+        L_CORNER_IN = 133
+        R_CORNER_OUT = 362
+        R_CORNER_IN = 263
+        # Eyelid top/bottom (khá ổn định cho tỉ lệ)
+        L_TOP = 159
+        L_BOTTOM = 145
+        R_TOP = 386
+        R_BOTTOM = 374
+
+        # Left eye center (from corners + lids)
+        left_eye_center_x = (landmark[L_CORNER_OUT].x + landmark[L_CORNER_IN].x) / 2
+        left_eye_center_y = (landmark[L_TOP].y + landmark[L_BOTTOM].y) / 2
+        left_eye_w = max(1e-6, abs(landmark[L_CORNER_IN].x - landmark[L_CORNER_OUT].x))
+        left_eye_h = max(1e-6, abs(landmark[L_BOTTOM].y - landmark[L_TOP].y))
+
+        # Right eye center
+        right_eye_center_x = (landmark[R_CORNER_OUT].x + landmark[R_CORNER_IN].x) / 2
+        right_eye_center_y = (landmark[R_TOP].y + landmark[R_BOTTOM].y) / 2
+        right_eye_w = max(1e-6, abs(landmark[R_CORNER_IN].x - landmark[R_CORNER_OUT].x))
+        right_eye_h = max(1e-6, abs(landmark[R_BOTTOM].y - landmark[R_TOP].y))
+
+        # Pupil positions
+        left_pupil_x = landmark[LEFT_PUPIL].x
+        left_pupil_y = landmark[LEFT_PUPIL].y
+        right_pupil_x = landmark[RIGHT_PUPIL].x
+        right_pupil_y = landmark[RIGHT_PUPIL].y
+
+        # Normalized gaze offsets within eye box
+        left_gaze_x = (left_pupil_x - left_eye_center_x) / left_eye_w
+        left_gaze_y = (left_pupil_y - left_eye_center_y) / left_eye_h
+        right_gaze_x = (right_pupil_x - right_eye_center_x) / right_eye_w
+        right_gaze_y = (right_pupil_y - right_eye_center_y) / right_eye_h
+
+        gaze_x = float(np.clip((left_gaze_x + right_gaze_x) / 2, -1.0, 1.0))
+        gaze_y = float(np.clip((left_gaze_y + right_gaze_y) / 2, -1.0, 1.0))
         
         return gaze_x, gaze_y
     except Exception as e:
@@ -395,7 +411,7 @@ def process_gaze_analysis(
                         adult_face_landmarks = None
                         adult_face_bbox = None
                     
-                    # Estimate gaze
+                    # Estimate gaze (normalized by eye size)
                     gaze_x, gaze_y = _estimate_gaze_from_landmarks(child_face_landmarks, w, h)
                     gaze_dir = _calculate_gaze_direction(gaze_x, gaze_y)
                     gaze_directions[gaze_dir] += 1
@@ -451,6 +467,8 @@ def process_gaze_analysis(
                                             gaze_3d_result = (object_id, confidence)
                                 except Exception as e:
                                     logger.debug(f"[Gaze] 3D gaze/head pose estimation error: {str(e)}")
+
+                            # (đã bỏ auto-calibration theo yêu cầu)
                             
                             # Calculate stability metrics
                             if stability_calc:
@@ -648,21 +666,9 @@ def process_gaze_analysis(
     # Focusing duration
     focusing_duration = (focusing_frames / fps) if fps > 0 else 0.0
     
-    # Book focusing score
-    book_focusing_score = 0.0
-    if detected_books and child_face_detected_count > 0:
-        # Calculate average focusing score for books
-        total_score = 0.0
-        for book in detected_books[:1]:  # Use first book
-            bbox = book.get('bbox', [])
-            if len(bbox) >= 4:
-                score = calculate_book_focusing_score(
-                    (w/2, h/2),  # Use center as gaze approximation
-                    bbox,
-                    (h, w)
-                )
-                total_score += score
-        book_focusing_score = total_score / len(detected_books) if detected_books else 0.0
+    # Book focusing score: bỏ công thức riêng, coi book là object bình thường
+    # Giữ field để không phá API: dùng attention_to_book_percentage (0-100) làm score đơn giản.
+    book_focusing_score = float(max(0.0, min(100.0, attention_to_book_percentage)))
     
     # Get results from tracking modules
     focus_timeline_data = []

@@ -20,8 +20,8 @@ class GazeConfig:
     # ========================================================================
     # GAZE ANALYSIS THRESHOLDS - Ngưỡng phân tích hướng nhìn
     # ========================================================================
-    
-    MIN_FOCUSING_DURATION: float = 5.0
+
+    MIN_FOCUSING_DURATION: float = 1.0
     """
     Thời gian tối thiểu (giây) để coi là trẻ đang "focusing" vào một đối tượng.
     
@@ -42,7 +42,7 @@ class GazeConfig:
     # IMPROVED GAZE STABILITY - Cải thiện tính toán gaze stability
     # ========================================================================
     
-    GAZE_STABILITY_USE_IMPROVED: bool = True
+    GAZE_STABILITY_USE_IMPROVED: bool = False
     """
     Có sử dụng improved gaze stability calculation không.
     

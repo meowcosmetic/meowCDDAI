@@ -29,7 +29,7 @@ async def analyze_gaze_camera(
     target_type: str = Form("camera", description="Loại đối tượng nhìn vào"),
     show_video: str = Form("true", description="Hiển thị video trong quá trình xử lý (true/false)"),
     camera_id: int = Form(0, description="Camera ID (0 = default camera)"),
-    max_duration: float = Form(60.0, description="Thời gian tối đa phân tích (giây), 0 = không giới hạn")
+    max_duration: float = Form(0.0, description="Thời gian tối đa phân tích (giây), 0 = không giới hạn")
 ):
     """
     Phân tích gaze từ camera real-time

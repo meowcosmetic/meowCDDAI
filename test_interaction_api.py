@@ -50,7 +50,7 @@ def test_interaction_api(video_path: str):
     print(f"🌐 API URL: {API_URL}")
     if SHOW_VIDEO:
         print(f"📺 Video Display: ENABLED (sẽ hiển thị video real-time)")
-        print("   → Nhấn 'q' trong cửa sổ video để tắt hiển thị")
+        print("   → Nhấn 'q' hoặc ESC trong cửa sổ video để tắt hiển thị")
     else:
         print(f"📺 Video Display: DISABLED")
     print("-" * 60)
@@ -138,9 +138,13 @@ def test_interaction_api(video_path: str):
                     
                     # Hiển thị một số events đầu tiên
                     for event in events[:3]:
-                        timestamp = event.get('timestamp', 0)
+                        start_time = event.get('start_time', event.get('timestamp', 0))
+                        duration = event.get('duration', None)
                         description = event.get('description', '')
-                        print(f"     • {timestamp:.1f}s: {description}")
+                        if duration is not None:
+                            print(f"     • {start_time:.1f}s (+{duration:.1f}s): {description}")
+                        else:
+                            print(f"     • {start_time:.1f}s: {description}")
                     
                     if len(events) > 3:
                         print(f"     ... và {len(events) - 3} events khác")

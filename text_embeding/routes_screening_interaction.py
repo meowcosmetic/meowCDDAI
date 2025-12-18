@@ -3,6 +3,7 @@ import logging
 import os
 import cv2
 import numpy as np
+from dataclasses import dataclass
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 import sys
@@ -52,6 +53,118 @@ COCO_CLASSES = [
 ]
 
 router = APIRouter(prefix="/screening/interaction", tags=["Screening - Interaction Detection"])
+
+
+@dataclass
+class _EventSegment:
+    key: str
+    type: str
+    start_frame: int
+    last_frame: int
+    start_time: float
+    last_time: float
+    payload: Dict[str, Any]
+
+
+class _EventSegmenter:
+    """
+    Gom các event "active theo frame" thành segment liên tục có start/end/duration.
+    """
+
+    def __init__(self, fps: float, max_gap_frames: int = 1):
+        self.fps = fps if fps and fps > 0 else 30.0
+        self.max_gap_frames = max(0, int(max_gap_frames))
+        self.active: Dict[str, _EventSegment] = {}
+        self.done: List[Dict[str, Any]] = []
+
+    @staticmethod
+    def _make_key(ev: Dict[str, Any]) -> str:
+        t = ev.get("type", "unknown")
+        obj_id = ev.get("object_id", ev.get("track_id", None))
+        obj_class = ev.get("object_class", None)
+        if obj_id is not None:
+            return f"{t}:{obj_class}:{obj_id}"
+        if obj_class is not None:
+            return f"{t}:{obj_class}"
+        return f"{t}"
+
+    def update(self, events_this_frame: List[Dict[str, Any]], frame: int) -> None:
+        seen_keys = set()
+        for ev in events_this_frame:
+            key = self._make_key(ev)
+            seen_keys.add(key)
+            ts = float(ev.get("timestamp", frame / self.fps))
+            ev_type = ev.get("type", "unknown")
+
+            seg = self.active.get(key)
+            if seg is None:
+                payload = dict(ev)
+                # bỏ timestamp/frame trong payload (đưa ra start/end riêng)
+                payload.pop("timestamp", None)
+                payload.pop("frame", None)
+                self.active[key] = _EventSegment(
+                    key=key,
+                    type=ev_type,
+                    start_frame=frame,
+                    last_frame=frame,
+                    start_time=ts,
+                    last_time=ts,
+                    payload=payload,
+                )
+            else:
+                # nối segment nếu liên tục (hoặc gap nhỏ)
+                if frame - seg.last_frame <= self.max_gap_frames + 1:
+                    seg.last_frame = frame
+                    seg.last_time = ts
+                else:
+                    # close segment cũ, mở segment mới
+                    self._close(seg)
+                    payload = dict(ev)
+                    payload.pop("timestamp", None)
+                    payload.pop("frame", None)
+                    self.active[key] = _EventSegment(
+                        key=key,
+                        type=ev_type,
+                        start_frame=frame,
+                        last_frame=frame,
+                        start_time=ts,
+                        last_time=ts,
+                        payload=payload,
+                    )
+
+        # close những segment không còn active ở frame này
+        to_close = []
+        for key, seg in self.active.items():
+            if key not in seen_keys and (frame - seg.last_frame) > self.max_gap_frames:
+                to_close.append(key)
+        for key in to_close:
+            seg = self.active.pop(key, None)
+            if seg:
+                self._close(seg)
+
+    def finalize(self) -> List[Dict[str, Any]]:
+        # close tất cả segment còn lại
+        for seg in list(self.active.values()):
+            self._close(seg)
+        self.active.clear()
+        # sort theo start_time
+        self.done.sort(key=lambda e: e.get("start_time", 0.0))
+        return self.done
+
+    def _close(self, seg: _EventSegment) -> None:
+        start_t = float(seg.start_time)
+        end_t = float(seg.last_time)
+        duration = max(0.0, end_t - start_t + (1.0 / self.fps))
+        out = {
+            "type": seg.type,
+            "start_time": round(start_t, 3),
+            "end_time": round(end_t, 3),
+            "duration": round(duration, 3),
+            "start_frame": seg.start_frame,
+            "end_frame": seg.last_frame,
+            **seg.payload,
+        }
+        self.done.append(out)
 
 
 def load_yolo_model():
@@ -327,7 +440,7 @@ def detect_interaction_events(tracks, hand_gestures, previous_state, frame_count
         parent = None
         child = None
     
-    # Detect pointing gestures
+    # Detect pointing gestures (active mỗi frame nếu đang có gesture)
     for hand_gesture in hand_gestures:
         if hand_gesture['type'] == 'pointing':
             events.append({
@@ -336,8 +449,19 @@ def detect_interaction_events(tracks, hand_gestures, previous_state, frame_count
                 'frame': frame_count,
                 'description': 'Pointing gesture detected'
             })
+        elif hand_gesture['type'] == 'pointing_at_object':
+            obj_class = hand_gesture.get('object_class', 'unknown')
+            obj_id = hand_gesture.get('object_id', None)
+            events.append({
+                'type': 'pointing_at_object',
+                'timestamp': frame_count / fps,
+                'frame': frame_count,
+                'object_class': obj_class,
+                'object_id': obj_id,
+                'description': f"Pointing at {obj_class}"
+            })
     
-    # Detect object offers (parent near object)
+    # Detect object offers (active mỗi frame khi parent gần object)
     if parent and objects:
         for obj in objects:
             parent_center = np.array(parent['center'])
@@ -346,18 +470,16 @@ def detect_interaction_events(tracks, hand_gestures, previous_state, frame_count
             obj_size = np.sqrt(obj['bbox'][2]**2 + obj['bbox'][3]**2)
             
             if distance < obj_size * 2:
-                # Parent đang cầm/đưa object
-                event_key = f"offer_{obj['track_id']}"
-                if event_key not in previous_state.get('active_offers', {}):
-                    events.append({
-                        'type': 'object_offer',
-                        'timestamp': frame_count / fps,
-                        'frame': frame_count,
-                        'object_class': obj['class'],
-                        'description': f"Parent offering {obj['class']}"
-                    })
+                events.append({
+                    'type': 'object_offer',
+                    'timestamp': frame_count / fps,
+                    'frame': frame_count,
+                    'object_class': obj['class'],
+                    'object_id': obj.get('track_id', None),
+                    'description': f"Parent offering {obj['class']}"
+                })
     
-    # Detect following (child gaze/facing towards object)
+    # Detect following (active mỗi frame khi child gần object)
     if child and objects:
         for obj in objects:
             child_center = np.array(child['center'])
@@ -367,17 +489,16 @@ def detect_interaction_events(tracks, hand_gestures, previous_state, frame_count
             
             # Child looking at object
             if distance < obj_size * 3:
-                event_key = f"following_{obj['track_id']}"
-                if event_key not in previous_state.get('active_following', {}):
-                    events.append({
-                        'type': 'following',
-                        'timestamp': frame_count / fps,
-                        'frame': frame_count,
-                        'object_class': obj['class'],
-                        'description': f"Child following {obj['class']}"
-                    })
+                events.append({
+                    'type': 'following',
+                    'timestamp': frame_count / fps,
+                    'frame': frame_count,
+                    'object_class': obj['class'],
+                    'object_id': obj.get('track_id', None),
+                    'description': f"Child following {obj['class']}"
+                })
     
-    # Detect object exchange (child near object after parent offer)
+    # Detect object exchange (active mỗi frame khi child rất gần object)
     if child and objects:
         for obj in objects:
             child_center = np.array(child['center'])
@@ -386,16 +507,14 @@ def detect_interaction_events(tracks, hand_gestures, previous_state, frame_count
             obj_size = np.sqrt(obj['bbox'][2]**2 + obj['bbox'][3]**2)
             
             if distance < obj_size * 1.5:
-                # Child receiving object
-                event_key = f"exchange_{obj['track_id']}"
-                if event_key not in previous_state.get('active_exchanges', {}):
-                    events.append({
-                        'type': 'object_exchange',
-                        'timestamp': frame_count / fps,
-                        'frame': frame_count,
-                        'object_class': obj['class'],
-                        'description': f"Child receiving {obj['class']}"
-                    })
+                events.append({
+                    'type': 'object_exchange',
+                    'timestamp': frame_count / fps,
+                    'frame': frame_count,
+                    'object_class': obj['class'],
+                    'object_id': obj.get('track_id', None),
+                    'description': f"Child receiving {obj['class']}"
+                })
     
     return events
 
@@ -505,7 +624,7 @@ async def analyze_interaction(
         fps = cap.get(cv2.CAP_PROP_FPS)
         
         show_video_bool = show_video.lower() in ("true", "1", "yes", "on")
-        
+
         # Load YOLO model
         yolo_net, yolo_output_layers = load_yolo_model()
         use_object_detection = yolo_net is not None
@@ -521,7 +640,8 @@ async def analyze_interaction(
                 min_tracking_confidence=0.5
             )
         
-        interaction_events = []
+        # interaction_events sẽ là danh sách SEGMENTS có start/end/duration
+        interaction_events: List[Dict[str, Any]] = []
         pointing_count = 0
         exchange_count = 0
         parent_offers = 0
@@ -534,6 +654,8 @@ async def analyze_interaction(
             'active_following': {},
             'active_exchanges': {}
         }
+        fps_for_seg = fps if fps and fps > 0 else 30.0
+        segmenter = _EventSegmenter(fps=float(fps_for_seg), max_gap_frames=1)
         
         while cap.isOpened():
             ret, frame = cap.read()
@@ -585,7 +707,8 @@ async def analyze_interaction(
             frame_events = detect_interaction_events(
                 tracks, hand_gestures, previous_state, frame_count, fps
             )
-            interaction_events.extend(frame_events)
+            # Gom events theo thời gian -> segment, tránh phình RAM khi chạy lâu
+            segmenter.update(frame_events, frame=frame_count)
             
             # Update counts
             for event in frame_events:
@@ -597,32 +720,7 @@ async def analyze_interaction(
                 elif event['type'] == 'object_offer':
                     parent_offers += 1
             
-            # Update previous state
-            for event in frame_events:
-                if event['type'] == 'object_offer':
-                    obj_class = event.get('object_class', 'unknown')
-                    previous_state['active_offers'][f"offer_{obj_class}"] = frame_count
-                elif event['type'] == 'following':
-                    obj_class = event.get('object_class', 'unknown')
-                    previous_state['active_following'][f"following_{obj_class}"] = frame_count
-                elif event['type'] == 'object_exchange':
-                    obj_class = event.get('object_class', 'unknown')
-                    previous_state['active_exchanges'][f"exchange_{obj_class}"] = frame_count
-            
-            # Clean old states (older than 2 seconds)
-            max_age = fps * 2
-            previous_state['active_offers'] = {
-                k: v for k, v in previous_state['active_offers'].items() 
-                if frame_count - v < max_age
-            }
-            previous_state['active_following'] = {
-                k: v for k, v in previous_state['active_following'].items() 
-                if frame_count - v < max_age
-            }
-            previous_state['active_exchanges'] = {
-                k: v for k, v in previous_state['active_exchanges'].items() 
-                if frame_count - v < max_age
-            }
+            # (legacy previous_state cleanup removed - events giờ là "active per frame")
             
             # Visualize
             if show_video_bool:
@@ -630,8 +728,9 @@ async def analyze_interaction(
                     frame, tracks, hand_gestures, frame_events, frame_count, fps
                 )
                 try:
-                    cv2.imshow("Interaction Analysis - Press 'q' to quit", annotated_frame)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                    cv2.imshow("Interaction Analysis - Press 'q' or ESC to quit", annotated_frame)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q') or key == 27:
                         show_video_bool = False
                 except cv2.error as e:
                     if "No display" in str(e) or "cannot connect" in str(e).lower():
@@ -641,6 +740,9 @@ async def analyze_interaction(
                         raise
             
             frame_count += 1
+
+        # Finalize segments sau khi xử lý xong video
+        interaction_events = segmenter.finalize()
         
         # Cleanup
         if cap:
@@ -666,8 +768,8 @@ async def analyze_interaction(
         # Tính toán kết quả
         response_rate = (child_responses / parent_offers * 100) if parent_offers > 0 else 0
         
-        # Tính interaction score (dựa trên số lượng tương tác và response rate)
-        interaction_density = len(interaction_events) / (frame_count / fps) if frame_count > 0 else 0  # events per second
+        # Tính interaction score (dựa trên số lượng segments và response rate)
+        interaction_density = len(interaction_events) / (frame_count / fps) if frame_count > 0 else 0  # segments per second
         interaction_score = min(100, (interaction_density * 10 + response_rate * 0.5))
         
         # Tính risk score (tương tác thấp = risk cao)

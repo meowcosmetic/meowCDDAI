@@ -21,7 +21,7 @@ API_URL = "http://localhost:8102/screening/gaze/analyze"
 # CẤU HÌNH VIDEO PATH - SỬA ĐƯỜNG DẪN Ở ĐÂY
 # ========================================
 # Cách 1: Đặt đường dẫn trực tiếp (ưu tiên)
-VIDEO_PATH = r"C:\Users\Admin\Desktop\mon.mp4"  # <-- SỬA ĐƯỜNG DẪN Ở ĐÂY
+VIDEO_PATH = r"C:\Users\Admin\Desktop\an.mp4"  # <-- SỬA ĐƯỜNG DẪN Ở ĐÂY
 
 # Cách 2: Hoặc để None để dùng command line argument
 # VIDEO_PATH = None
