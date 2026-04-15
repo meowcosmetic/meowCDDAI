@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\components\performance\performance_optimizer.py
+# hypothesis_version: 6.149.0
+
+[0.0, 2.0, 25.0, 28.0, 30.0, 1000.0, 2048.0, 'average_latency_ms', 'complexity', 'current_fps', 'dropped_frames', 'fps_deficit', 'full', 'gpu_available', 'high', 'low', 'medium', 'memory_limit_mb', 'samples_collected', 'target_fps', 'target_latency_ms', 'window_size']

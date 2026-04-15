@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\components\face_detection\hybrid_face_detector.py
+# hypothesis_version: 6.149.0
+
+[0.0, 0.1, 0.2, 0.3, 0.5, 0.6, 0.7, 0.8, 1.0, 2.0, 100, 'active_tracks', 'created', 'detection_history', 'detections', 'face_tracks', 'fallback_usage_rate', 'fallback_used', 'frame_shape', 'inf', 'last_detection', 'last_seen', 'mediapipe_success', 'positions', 'temporal_predictions', 'timestamp', 'timestamps', 'total_frames']

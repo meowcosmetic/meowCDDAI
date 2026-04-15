@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\components\focus_detection\focus_detector.py
+# hypothesis_version: 6.149.0
+
+[0.0, 0.01, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 15.0, 20.0, 50.0, 500.0, 240, 320, 'attention_span', 'bbox', 'class_name', 'confidence', 'depth_estimate', 'face', 'focus_distribution', 'from', 'id', 'inf', 'objects', 'person', 'shift_frequency', 'shift_sequence', 'time', 'timestamp', 'to', 'total_shifts', 'unknown', 'vector']

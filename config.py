@@ -23,9 +23,16 @@ class Config:
     
     # Ollama Configuration
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "hf.co/unsloth/gpt-oss-20b-GGUF:Q4_K_M")  # Tên model trong Ollama
+    OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "qwen3:8b")  # Tên model trong Ollama
     
     # OpenAI-compatible API Configuration (nếu dùng vLLM, llama.cpp server, etc.)
     LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:8000/v1")
     LOCAL_LLM_MODEL_NAME = os.getenv("LOCAL_LLM_MODEL_NAME", "gpt-20b")
     LOCAL_LLM_API_KEY = os.getenv("LOCAL_LLM_API_KEY", "not-needed")
+
+    # Postgres Configuration
+    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+    POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+    POSTGRES_DB = os.getenv("POSTGRES_DB", "MeowCDD")
+    POSTGRES_USER = os.getenv("POSTGRES_USER", "cdd_app_admin")
+    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "cdd_app_admin")

@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\core\logging_config.py
+# hypothesis_version: 6.149.0
+
+[0.0, 0.5, 1000, 1024, 'INFO', 'avg_time', 'component', 'confidence', 'count', 'duration', 'duration_ms', 'error', 'focus_detection', 'focus_type', 'frame_id', 'function', 'gaze_estimation', 'head_pose_quality', 'inf', 'level', 'lighting_quality', 'line', 'logger', 'max_time', 'message', 'method', 'min_time', 'module', 'operation', 'overall_quality', 'quality_assessment', 'timestamp', 'total_time']

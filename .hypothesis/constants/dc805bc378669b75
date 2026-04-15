@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\components\face_detection\__init__.py
+# hypothesis_version: 6.149.0
+
+['CustomFaceDetector', 'HybridFaceDetector']

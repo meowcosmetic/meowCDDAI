@@ -1,0 +1,104 @@
+# AI-Enhanced Gaze Tracking System — Configuration Template
+# Copy this file to config.yaml and adjust values for your environment.
+# All parameters are optional; defaults are shown below.
+
+# ============================================================
+# FACE DETECTION
+# ============================================================
+face_detection_model: "mediapipe"       # "mediapipe" | "opencv" | "custom"
+face_detection_confidence: 0.5          # Minimum detection confidence (0–1)
+face_quality_threshold: 0.6             # Minimum face quality to process (0–1)
+child_face_size_threshold: 0.10         # Min face width as fraction of frame
+adult_face_size_threshold: 0.15
+
+# ============================================================
+# HEAD POSE ESTIMATION
+# ============================================================
+head_pose_compensation: true            # Enable 3D head pose compensation (Req 1)
+head_pose_model: "pnp_solver"           # "pnp_solver" | "ai_model"
+head_pose_smoothing: true
+head_pose_smoothing_factor: 0.7         # Temporal smoothing weight (0–1)
+max_head_rotation_degrees: 45.0         # Max supported head rotation
+
+# ============================================================
+# GAZE ESTIMATION
+# ============================================================
+gaze_estimation_method: "multi_modal"   # "2d" | "3d" | "ai" | "multi_modal"
+ai_gaze_model_path: null                # Path to AI model weights (null = CV only)
+ai_gaze_confidence_threshold: 0.5       # Min AI confidence before fallback (Req 3.4)
+gaze_ensemble_models: []                # List of additional model paths for ensemble
+gaze_smoothing: true
+gaze_smoothing_window: 5                # Frames to average for smoothing
+
+# ============================================================
+# CAMERA CALIBRATION
+# ============================================================
+camera_angle_correction: true           # Enable camera angle bias correction (Req 2)
+auto_calibration: true                  # Auto-calibrate at session start
+calibration_reference_points: 9         # Number of reference points for calibration
+max_camera_angle_degrees: 30.0          # Max correctable camera angle
+recalibration_interval: 300.0           # Seconds between auto-recalibration checks
+
+# ============================================================
+# SENSOR FUSION
+# ============================================================
+sensor_fusion_method: "kalman"          # "weighted" | "kalman" | "particle"
+fusion_weights:
+  2d_landmarks: 0.3
+  3d_pose: 0.4
+  ai_model: 0.3
+adaptive_weights: true                  # Auto-adjust weights by confidence (Req 4.2)
+temporal_consistency_weight: 0.2
+
+# ============================================================
+# FOCUS DETECTION
+# ============================================================
+focus_detection_enabled: true
+min_focus_duration: 1.0                 # Minimum seconds for valid focus (Req 6.1)
+focus_stability_threshold: 0.02         # Max gaze movement for stable focus
+focus_stability_window_ms: 200.0        # Window for stability assessment
+require_object_focus: true              # Require a tracked object for focus (Req 6.2)
+wandering_detection_enabled: true       # Detect wandering gaze (Req 6.4)
+
+# ============================================================
+# OBJECT DETECTION
+# ============================================================
+object_detection_model: "yolov8"        # "yolov8" | "custom"
+object_detection_confidence: 0.5
+object_detection_interval: 5            # Run detection every N frames
+custom_yolo_weights: ""                 # Path to custom YOLO weights (empty = default)
+oid_model_size: "l"                     # "n" | "s" | "m" | "l" | "x"
+
+# ============================================================
+# QUALITY ASSESSMENT
+# ============================================================
+quality_assessment: true
+min_quality_threshold: 0.5              # Below this → flag as unreliable (Req 9.5)
+lighting_quality_weight: 0.3
+occlusion_quality_weight: 0.3
+stability_quality_weight: 0.4
+
+# ============================================================
+# PERFORMANCE
+# ============================================================
+real_time_processing: true
+target_fps: 30
+max_processing_latency_ms: 33.0         # ~30 FPS budget
+gpu_acceleration: true                  # Use GPU for AI inference (Req 7.3)
+memory_limit_mb: 2048                   # Soft memory limit before degradation
+
+# ============================================================
+# LOGGING AND MONITORING
+# ============================================================
+log_level: "INFO"                       # "DEBUG" | "INFO" | "WARNING" | "ERROR"
+log_file: null                          # Path to log file (null = stdout only)
+structured_logging: true
+performance_monitoring: true
+metrics_collection: true
+
+# ============================================================
+# BACKWARD COMPATIBILITY
+# ============================================================
+legacy_api_support: true                # Maintain legacy API responses (Req 10.1)
+legacy_output_format: true              # Include legacy fields in output (Req 10.3)
+migration_mode: false                   # Enable gradual migration helpers (Req 10.4)

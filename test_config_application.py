@@ -72,3 +72,5 @@ print("   Ví dụ: MAX_FRAME_WIDTH = 1280  # Cho màn hình lớn hơn")
 
 
 
+
+

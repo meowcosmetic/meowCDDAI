@@ -32,21 +32,26 @@ class HybridSearchService:
         self.documents = []
         self.document_ids = []
         
-        for book_vector in book_vectors:
+        for point in book_vectors:
+            payload = point.payload
+            
             # Combine content, title, and tags for keyword search
-            content = book_vector.payload.content
-            title = book_vector.payload.title
-            tags = " ".join(book_vector.payload.tags)
+            # Handle both old and new payload formats
+            content = payload.get("content", "")
+            title = payload.get("book_name") or payload.get("title", "")
+            chapter = payload.get("chapter", "")
+            tags_list = payload.get("tags", [])
+            tags = " ".join(tags_list) if isinstance(tags_list, list) else str(tags_list)
             
             # Create searchable text
-            searchable_text = f"{title} {content} {tags}"
+            searchable_text = f"{title} {chapter} {content} {tags}"
             
             # Tokenize for BM25 (simple word splitting for Vietnamese)
             tokens = self._tokenize_vietnamese(searchable_text)
             
             if tokens:  # Only add if we have tokens
                 self.documents.append(tokens)
-                self.document_ids.append(book_vector.id)
+                self.document_ids.append(str(point.id))
         
         # Build BM25 index
         if self.documents:
@@ -156,6 +161,9 @@ class HybridSearchService:
                         # Parse payload format mới
                         payload = BookPayload(
                             book_id=result.payload.get("book_id", "unknown"),
+                            book_name=result.payload.get("book_name"),
+                            chapter=result.payload.get("chapter"),
+                            page=result.payload.get("page"),
                             summary=result.payload.get("summary"),
                             content=result.payload.get("content", ""),
                         )

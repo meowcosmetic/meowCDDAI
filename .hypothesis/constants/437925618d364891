@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\compatibility\config_bridge.py
+# hypothesis_version: 6.149.0
+
+['1', 'AI_MODEL_PATH', 'CUSTOM_YOLO_WEIGHTS', 'GAZE_METHOD', 'HEAD_POSE_ENABLED', 'LOG_LEVEL', 'MEMORY_LIMIT_MB', 'MIN_FOCUS_DURATION', 'TARGET_FPS', 'USE_GPU', 'adaptive_weights', 'ai_gaze_model_path', 'ai_model_path', 'auto_calibration', 'custom_yolo_weights', 'gaze_method', 'gaze_smoothing', 'gpu_acceleration', 'head_pose_enabled', 'head_pose_smoothing', 'legacy_api_support', 'legacy_output_format', 'log_level', 'memory_limit_mb', 'metrics_collection', 'migration_mode', 'min_focus_duration', 'on', 'quality_assessment', 'real_time_processing', 'structured_logging', 'target_fps', 'true', 'yes']

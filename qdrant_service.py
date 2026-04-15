@@ -46,13 +46,18 @@ class QdrantService:
         Ensure the collection exists with proper configuration
         """
         try:
-            collections = self.client.get_collections()
-            collection_names = [col.name for col in collections.collections]
+            logger.info(f"[QDRANT] Kiểm tra collection: {self.collection_name}")
+            exists = False
+            try:
+                self.client.get_collection(self.collection_name)
+                exists = True
+                logger.info(f"[QDRANT] Collection {self.collection_name} đã tồn tại")
+            except Exception:
+                exists = False
             
-            if self.collection_name not in collection_names:
+            if not exists:
                 # Create collection with 1024 dimensions for two named vectors
-                logger.info(f"[QDRANT] Đang tạo collection: {self.collection_name}")
-                logger.info(f"[QDRANT] Named vectors: summary (1024 dim), content (1024 dim)")
+                logger.info(f"[QDRANT] Đang tạo mới collection: {self.collection_name}")
                 self.client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config={
@@ -61,11 +66,10 @@ class QdrantService:
                     },
                 )
                 logger.info(f"[QDRANT] ✅ Đã tạo collection: {self.collection_name}")
-            else:
-                logger.info(f"[QDRANT] Collection {self.collection_name} đã tồn tại")
         except Exception as e:
-            logger.error(f"[QDRANT] ❌ Lỗi khi tạo/kiểm tra collection: {str(e)}", exc_info=True)
-            raise
+            logger.error(f"[QDRANT] ❌ Lỗi khi tạo/kiểm tra collection: {str(e)}")
+            # Không raise ở đây để tránh crash app nếu Qdrant chưa sẵn sàng lúc khởi động
+            # Nhưng sẽ check lại lúc thực hiện thao tác
     
     def add_book_vectors(self, book_vectors: List[BookVector]) -> List[str]:
         """
@@ -129,14 +133,26 @@ class QdrantService:
         start_time = datetime.now()
         
         try:
-            self.client.upsert(
-                collection_name=self.collection_name,
-                points=points,
-            )
+            try:
+                self.client.upsert(
+                    collection_name=self.collection_name,
+                    points=points,
+                )
+            except Exception as e:
+                # Nếu lỗi 404 (Not Found), thử tạo lại collection và upsert lại
+                if "Not Found" in str(e) or "doesn't exist" in str(e).lower():
+                    logger.warning(f"[QDRANT] Collection rỗng hoặc bị mất, đang tạo lại...")
+                    self._ensure_collection_exists()
+                    self.client.upsert(
+                        collection_name=self.collection_name,
+                        points=points,
+                    )
+                else:
+                    raise e
+            
             elapsed = (datetime.now() - start_time).total_seconds()
             point_ids = [str(p.id) for p in points]
             logger.info(f"[QDRANT] ✅ Upsert thành công {len(points)} points ({elapsed:.2f}s)")
-            logger.debug(f"[QDRANT] Point IDs: {point_ids[:5]}{'...' if len(point_ids) > 5 else ''}")
             return point_ids
         except Exception as e:
             logger.error(f"[QDRANT] ❌ Lỗi khi upsert points: {str(e)}", exc_info=True)
@@ -148,7 +164,14 @@ class QdrantService:
         """
         try:
             # Get collection info to know total count
-            collection_info = self.get_collection_info()
+            try:
+                collection_info = self.get_collection_info()
+            except Exception as e:
+                if "Not Found" in str(e) or "doesn't exist" in str(e).lower():
+                    logger.warning(f"[QDRANT] Collection {self.collection_name} không tồn tại khi get_all_vectors")
+                    return []
+                raise e
+                
             total_count = collection_info.vectors_count
             
             if total_count == 0:
@@ -217,5 +240,5 @@ class QdrantService:
         try:
             return self.client.get_collection(self.collection_name)
         except Exception as e:
-            print(f"Error getting collection info: {e}")
-            raise
+            # Nếu đang kiểm tra tại init thì lỗi này sẽ được bắt
+            raise e

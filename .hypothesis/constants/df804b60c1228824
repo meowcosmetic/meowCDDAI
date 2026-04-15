@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\components\gaze_estimation\compensated_gaze_estimator.py
+# hypothesis_version: 6.149.0
+
+[0.0, 1e-06, 0.2, 0.5, 1.0, 2.0, 10.0, 240.0, 320.0, 500.0, 128, 133, 144, 145, 153, 154, 155, 157, 158, 159, 160, 161, 163, 173, 240, 246, 249, 263, 320, 362, 373, 374, 380, 381, 382, 384, 385, 386, 387, 388, 390, 398, 466, 800, 1000, '1.0.0', 'compensated_3d', 'default', 'eye_landmarks', 'gaze_estimation', 'head_pose', 'left', 'method', 'name', 'requires_head_pose', 'right', 'supports_3d', 'version']

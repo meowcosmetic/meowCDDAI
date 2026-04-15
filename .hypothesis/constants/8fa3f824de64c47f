@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\components\error_handling\error_handler.py
+# hypothesis_version: 6.149.0
+
+[0.0, 10.0, 85.0, 95.0, 2500.0, 3000.0, 'ErrorHandler reset.', 'ResourceExhaustion', 'active_fallbacks', 'ai_model', 'available', 'camera', 'component', 'component_health', 'cpu', 'cpu_percent', 'critical', 'degraded', 'disabled_components', 'error_type', 'face_detection', 'failed', 'failure_count', 'graceful_shutdown', 'guidance', 'high', 'low', 'medium', 'memory', 'memory_mb', 'message', 'minimal', 'model', 'normal', 'notify_user', 'recent_errors', 'recovered', 'recovering', 'recovery_action', 'recovery_attempts', 'reduce_complexity', 'restart_component', 'retry', 'severity', 'skip_frame', 'system_state', 'timestamp', 'total_errors_logged', 'use_fallback', 'using_fallback']

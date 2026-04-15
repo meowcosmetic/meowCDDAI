@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\components\gaze_estimation\ai_gaze_estimator.py
+# hypothesis_version: 6.149.0
+
+[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 1.0, 255.0, '1.0.0', 'MockGazeNet', 'Model not loaded', 'accuracy', 'ai_ensemble', 'ai_model', 'ai_single', 'confidence_threshold', 'description', 'ensemble_enabled', 'fallback', 'fallback_enabled', 'input_size', 'mock_path', 'model_index', 'model_loaded', 'models', 'name', 'num_models', 'version']

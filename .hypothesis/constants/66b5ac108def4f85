@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\compatibility\legacy_adapter.py
+# hypothesis_version: 6.149.0
+
+[0.0, 0.12, 0.2, 0.4, 1.0, 20.0, 100.0, 100, '2.0.0', 'ai_model_active', 'analyzed_duration', 'average_position', 'avg_stability', 'book_focusing_score', 'center', 'confidence', 'confidence_scores', 'detected_books', 'detected_objects', 'down', 'duration', 'end_time', 'enhanced_version', 'event_count', 'fatigue_indicators', 'fatigue_level', 'fatigue_score', 'focus_level', 'focus_level_details', 'focus_timeline', 'focus_type', 'focusing_duration', 'gaze_direction_stats', 'gaze_wandering_score', 'left', 'low', 'object_focus_stats', 'overall_quality', 'pattern_analysis', 'quality_metrics', 'right', 'risk_score', 'sensor_fusion_active', 'stability_score', 'start_time', 'target_object_id', 'total_duration', 'total_frames', 'unknown', 'up', 'variance', 'wandering_periods']

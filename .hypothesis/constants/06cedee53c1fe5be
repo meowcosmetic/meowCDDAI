@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\components\face_detection\mediapipe_face_detector.py
+# hypothesis_version: 6.149.0
+
+[0.0, 0.02, 0.1, 0.2, 0.25, 0.3, 0.5, 1.0, 2.0, 10.0, 30.0, 100, 133, 144, 145, 152, 153, 154, 155, 157, 158, 159, 160, 161, 163, 173, 190, 246, 249, 255, 263, 291, 362, 373, 374, 380, 381, 382, 384, 385, 386, 387, 388, 390, 398, 466, 468, 'blur', 'eyes', 'face_mesh', 'inf', 'lighting', 'max_blur_threshold', 'max_brightness', 'max_occlusion_ratio', 'min_brightness', 'min_face_size', 'occlusion', 'size']

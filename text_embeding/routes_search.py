@@ -10,6 +10,7 @@ from .services import (
     hybrid_search_service,
     ensure_keyword_index_if_needed,
 )
+from postgres_service import postgres_service
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,10 @@ def parse_payload(payload: Dict[str, Any]) -> BookPayload:
     """
     return BookPayload(
         book_id=payload.get("book_id", "unknown"),
+        book_name=payload.get("book_name"),
+        chapter=payload.get("chapter"),
+        page=payload.get("page"),
+        postgres_id=payload.get("postgres_id"),
         summary=payload.get("summary"),
         content=payload.get("content", ""),
     )
@@ -41,6 +46,13 @@ async def search_books(search_request: SearchRequest):
         responses: List[SearchResponse] = []
         for result in search_results:
             payload = parse_payload(result.payload)
+            
+            # Fetch context if requested
+            if search_request.include_context and payload.postgres_id:
+                prev_c, next_c = postgres_service.get_neighbor_content(payload.postgres_id)
+                payload.prev_content = prev_c
+                payload.next_content = next_c
+
             response = SearchResponse(
                 id=result.id,
                 score=result.score,
@@ -71,6 +83,13 @@ async def search_keywords(search_request: SearchRequest):
         for doc_id, score in keyword_results:
             if doc_id in points_dict:
                 payload = parse_payload(points_dict[doc_id].payload)
+                
+                # Fetch context if requested
+                if search_request.include_context and payload.postgres_id:
+                    prev_c, next_c = postgres_service.get_neighbor_content(payload.postgres_id)
+                    payload.prev_content = prev_c
+                    payload.next_content = next_c
+
                 response = SearchResponse(
                     id=doc_id,
                     score=score,
@@ -97,6 +116,15 @@ async def search_hybrid(hybrid_request: HybridSearchRequest):
             beta=hybrid_request.beta,
             score_threshold=hybrid_request.score_threshold,
         )
+
+        # Fetch context if requested for hybrid results
+        if hybrid_request.include_context:
+            for result in hybrid_results:
+                if result.payload.postgres_id:
+                    prev_c, next_c = postgres_service.get_neighbor_content(result.payload.postgres_id)
+                    result.payload.prev_content = prev_c
+                    result.payload.next_content = next_c
+        
         return hybrid_results
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Lỗi khi tìm kiếm hybrid: {str(exc)}")

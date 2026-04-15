@@ -1,0 +1,4 @@
+# file: C:\Users\Admin\Desktop\meow\meowCDDAI\ai_enhanced_gaze_tracking\core\data_models.py
+# hypothesis_version: 6.149.0
+
+[0.0, 0.5, 1.0, 'QualityMetrics', 'high', 'low', 'medium', 'multi_modal', 'object', 'person', 'unknown', 'wandering']
