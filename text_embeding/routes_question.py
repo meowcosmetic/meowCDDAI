@@ -6,18 +6,10 @@ from pydantic import BaseModel, Field
 import sys
 import os
 
-# Thêm path để import config và langchain
+# Thêm path để import config và ai_service
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage
-
-# Cấu hình Google AI
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=Config.GOOGLE_AI_API_KEY,
-    temperature=0.7
-)
+from ai_service import ai_service
 
 router = APIRouter()
 
@@ -110,14 +102,13 @@ async def generate_question_content(payload: QuestionRequest):
         """
 
         # Gọi AI để generate
-        messages = [HumanMessage(content=prompt)]
-        response = llm.invoke(messages)
+        ai_response = ai_service.chat(prompt)
         
-        if not response.content:
+        if not ai_response:
             raise HTTPException(status_code=500, detail="Không thể generate nội dung từ AI")
         
         # Parse response từ AI
-        ai_response = response.content.strip()
+        # ai_response = response.content.strip() if using langchain
         
         # Xử lý response để extract JSON
         try:

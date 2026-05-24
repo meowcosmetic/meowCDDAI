@@ -58,13 +58,19 @@ class QdrantService:
             if not exists:
                 # Create collection with 1024 dimensions for two named vectors
                 logger.info(f"[QDRANT] Đang tạo mới collection: {self.collection_name}")
-                self.client.create_collection(
-                    collection_name=self.collection_name,
-                    vectors_config={
-                        "summary": VectorParams(size=1024, distance=Distance.COSINE),
-                        "content": VectorParams(size=1024, distance=Distance.COSINE),
-                    },
-                )
+                try:
+                    self.client.create_collection(
+                        collection_name=self.collection_name,
+                        vectors_config={
+                            "summary": VectorParams(size=1024, distance=Distance.COSINE),
+                            "content": VectorParams(size=1024, distance=Distance.COSINE),
+                        },
+                    )
+                except Exception as e:
+                    if "409" in str(e) or "already exists" in str(e).lower():
+                        logger.info(f"[QDRANT] Collection {self.collection_name} đã được tạo bởi tiến trình khác")
+                    else:
+                        raise e
                 logger.info(f"[QDRANT] ✅ Đã tạo collection: {self.collection_name}")
         except Exception as e:
             logger.error(f"[QDRANT] ❌ Lỗi khi tạo/kiểm tra collection: {str(e)}")

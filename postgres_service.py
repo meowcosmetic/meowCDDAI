@@ -9,22 +9,32 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 class PostgresService:
-    def __init__(self, 
-                 host=Config.POSTGRES_HOST, 
-                 port=Config.POSTGRES_PORT, 
-                 dbname=Config.POSTGRES_DB, 
-                 user=Config.POSTGRES_USER, 
-                 password=Config.POSTGRES_PASSWORD):
-        self.conn_params = {
-            "host": host,
-            "port": port,
-            "dbname": dbname,
-            "user": user,
-            "password": password
-        }
+    def __init__(self):
+        self.database_url = Config.DATABASE_URL
+        if not self.database_url:
+            params = Config.get_postgres_params()
+            self.conn_params = {
+                "host": params["host"],
+                "port": params["port"],
+                "dbname": params["database"],
+                "user": params["user"],
+                "password": params["password"],
+                "sslmode": "prefer"  # prefer for local, require for cloud
+            }
         self._ensure_table_exists()
 
     def _get_connection(self):
+        if self.database_url:
+            # Always go through get_postgres_params() so %27/%20 in db name are unquoted
+            params = Config.get_postgres_params()
+            return psycopg2.connect(
+                host=params["host"],
+                port=params["port"],
+                dbname=params["database"],
+                user=params["user"],
+                password=params["password"],
+                sslmode="require"
+            )
         return psycopg2.connect(**self.conn_params)
 
     def _ensure_table_exists(self):

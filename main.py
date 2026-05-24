@@ -1,3 +1,4 @@
+print("🚀 MEOW CDD AI VERSION 2.0 STARTING (GPU ENABLED)...")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

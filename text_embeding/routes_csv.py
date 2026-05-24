@@ -14,85 +14,10 @@ import requests
 # Thêm path để import config và langchain
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
-from langchain_core.messages import HumanMessage
-
-# Setup logger
-logger = logging.getLogger(__name__)
-
-# Cấu hình LLM - Sử dụng Ollama hoặc OpenAI-compatible API
-def get_llm():
-    """
-    Khởi tạo LLM - sử dụng Ollama hoặc OpenAI-compatible API
-    """
-    if not Config.USE_LOCAL_LLM:
-        raise ValueError("USE_LOCAL_LLM phải được bật (true) để sử dụng model local")
-    
-    if Config.LLM_TYPE == "ollama":
-        # Sử dụng Ollama
-        try:
-            from langchain_ollama import ChatOllama
-            logger.info(f"[CSV] Khởi tạo Ollama model: {Config.OLLAMA_MODEL_NAME} tại {Config.OLLAMA_BASE_URL}")
-            
-            llm_instance = ChatOllama(
-                model=Config.OLLAMA_MODEL_NAME,
-                base_url=Config.OLLAMA_BASE_URL,
-                temperature=0.7,
-                timeout=120
-            )
-            
-            # Test connection với Ollama
-            try:
-                test_response = requests.get(f"{Config.OLLAMA_BASE_URL}/api/tags", timeout=5)
-                if test_response.status_code == 200:
-                    logger.info(f"[CSV] ✅ Ollama đang chạy tại {Config.OLLAMA_BASE_URL}")
-                    # Kiểm tra xem model có tồn tại không
-                    models = test_response.json().get("models", [])
-                    model_names = [m.get("name", "") for m in models]
-                    if Config.OLLAMA_MODEL_NAME not in model_names:
-                        logger.warning(f"[CSV] ⚠️ Model '{Config.OLLAMA_MODEL_NAME}' chưa được pull trong Ollama")
-                        logger.warning(f"[CSV] ⚠️ Chạy: ollama pull {Config.OLLAMA_MODEL_NAME}")
-                else:
-                    logger.warning(f"[CSV] ⚠️ Không thể kết nối đến Ollama tại {Config.OLLAMA_BASE_URL}")
-            except Exception as e:
-                logger.warning(f"[CSV] ⚠️ Không thể kiểm tra Ollama: {str(e)}")
-                logger.warning(f"[CSV] ⚠️ Đảm bảo Ollama đang chạy: ollama serve")
-            
-            return llm_instance
-        except ImportError:
-            raise ImportError(
-                "langchain-ollama chưa được cài đặt. "
-                "Cài đặt bằng: pip install langchain-ollama"
-            )
-    else:
-        # Sử dụng OpenAI-compatible API (vLLM, llama.cpp server, etc.)
-        try:
-            from langchain_openai import ChatOpenAI
-            logger.info(f"[CSV] Khởi tạo OpenAI-compatible model: {Config.LOCAL_LLM_MODEL_NAME} tại {Config.LOCAL_LLM_BASE_URL}")
-            
-            llm_instance = ChatOpenAI(
-                model=Config.LOCAL_LLM_MODEL_NAME,
-                base_url=Config.LOCAL_LLM_BASE_URL,
-                api_key=Config.LOCAL_LLM_API_KEY,
-                temperature=0.7,
-                timeout=120
-            )
-            
-            # Test connection
-            try:
-                test_response = requests.get(f"{Config.LOCAL_LLM_BASE_URL.replace('/v1', '')}/health", timeout=5)
-                logger.info(f"[CSV] ✅ Model local đang chạy tại {Config.LOCAL_LLM_BASE_URL}")
-            except:
-                logger.warning(f"[CSV] ⚠️ Không thể kiểm tra health của model local tại {Config.LOCAL_LLM_BASE_URL}")
-                logger.warning(f"[CSV] ⚠️ Đảm bảo model local đang chạy trước khi sử dụng")
-            
-            return llm_instance
-        except ImportError:
-            raise ImportError(
-                "langchain-openai chưa được cài đặt. "
-                "Cài đặt bằng: pip install langchain-openai"
-            )
-
-llm = get_llm()
+# Thêm path để import config và ai_service
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import Config
+from ai_service import ai_service
 
 router = APIRouter()
 
@@ -213,39 +138,18 @@ def match_domain_id(domain_name: str, domain_mapping: Dict[str, str]) -> Optiona
 
 def call_llm(prompt: str) -> str:
     """
-    Gọi LLM local với prompt và trả về response text
-    Chỉ sử dụng model local, không có fallback
+    Gọi AI Hub với prompt và trả về response text
     """
-    if llm is None:
+    try:
+        # Sử dụng ai_service proxy
+        response = ai_service.chat(prompt)
+        return response
+    except Exception as e:
+        logger.error(f"[CSV] Lỗi khi gọi AI Hub: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Model local chưa được khởi tạo. Kiểm tra cấu hình tại {Config.LOCAL_LLM_BASE_URL}"
+            detail=f"Lỗi khi gọi AI Hub: {str(e)}"
         )
-    
-    try:
-        # Sử dụng langchain LLM
-        messages = [HumanMessage(content=prompt)]
-        response = llm.invoke(messages)
-        return response.content if hasattr(response, 'content') else str(response)
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"[CSV] Lỗi khi gọi model local: {error_msg}")
-        
-        # Kiểm tra xem có phải lỗi connection không
-        if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "10061" in error_msg:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    f"Không thể kết nối đến model local tại {Config.LOCAL_LLM_BASE_URL}. "
-                    f"Vui lòng đảm bảo model local đang chạy. "
-                    f"Lỗi: {error_msg}"
-                )
-            )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Lỗi khi gọi model local: {error_msg}"
-            )
 
 
 def generate_title(item: str) -> Dict[str, str]:

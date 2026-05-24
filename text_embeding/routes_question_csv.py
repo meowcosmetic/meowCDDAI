@@ -10,89 +10,26 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 import sys
 
-# Thêm path để import config và langchain
+# Thêm path để import config và ai_service
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
-from langchain_core.messages import HumanMessage
+from ai_service import ai_service
 import requests
 
 # Setup logger
 logger = logging.getLogger(__name__)
 
-# Import LLM setup - sử dụng lại logic từ routes_csv
-def get_llm():
-    """
-    Khởi tạo LLM - sử dụng Ollama hoặc OpenAI-compatible API
-    """
-    if not Config.USE_LOCAL_LLM:
-        raise ValueError("USE_LOCAL_LLM phải được bật (true) để sử dụng model local")
-    
-    if Config.LLM_TYPE == "ollama":
-        try:
-            from langchain_ollama import ChatOllama
-            logger.info(f"[QuestionCSV] Khởi tạo Ollama model: {Config.OLLAMA_MODEL_NAME} tại {Config.OLLAMA_BASE_URL}")
-            return ChatOllama(
-                model=Config.OLLAMA_MODEL_NAME,
-                base_url=Config.OLLAMA_BASE_URL,
-                temperature=0.7,
-                timeout=120
-            )
-        except ImportError:
-            raise ImportError("langchain-ollama chưa được cài đặt. Cài đặt bằng: pip install langchain-ollama")
-    else:
-        try:
-            from langchain_openai import ChatOpenAI
-            logger.info(f"[QuestionCSV] Khởi tạo OpenAI-compatible model: {Config.LOCAL_LLM_MODEL_NAME} tại {Config.LOCAL_LLM_BASE_URL}")
-            return ChatOpenAI(
-                model=Config.LOCAL_LLM_MODEL_NAME,
-                base_url=Config.LOCAL_LLM_BASE_URL,
-                api_key=Config.LOCAL_LLM_API_KEY,
-                temperature=0.7,
-                timeout=120
-            )
-        except ImportError:
-            raise ImportError("langchain-openai chưa được cài đặt. Cài đặt bằng: pip install langchain-openai")
+router = APIRouter()
 
 def call_llm(prompt: str) -> str:
     """
-    Gọi LLM local với prompt và trả về response text
+    Gọi AI Hub với prompt và trả về response text
     """
-    if llm is None:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Model local chưa được khởi tạo. Kiểm tra cấu hình tại {Config.OLLAMA_BASE_URL if Config.LLM_TYPE == 'ollama' else Config.LOCAL_LLM_BASE_URL}"
-        )
-    
     try:
-        messages = [HumanMessage(content=prompt)]
-        response = llm.invoke(messages)
-        return response.content if hasattr(response, 'content') else str(response)
+        return ai_service.chat(prompt)
     except Exception as e:
-        error_msg = str(e)
-        logger.error(f"[QuestionCSV] Lỗi khi gọi model local: {error_msg}")
-        if "connection" in error_msg.lower() or "refused" in error_msg.lower() or "10061" in error_msg:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    f"Không thể kết nối đến model local. "
-                    f"Vui lòng đảm bảo model local đang chạy. "
-                    f"Lỗi: {error_msg}"
-                )
-            )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Lỗi khi gọi model local: {error_msg}"
-            )
-
-router = APIRouter()
-
-# Khởi tạo LLM (sau khi định nghĩa get_llm)
-llm = None
-try:
-    llm = get_llm()
-except Exception as e:
-    logger.error(f"[QuestionCSV] Không thể khởi tạo LLM: {str(e)}")
+        logger.error(f"[QuestionCSV] Lỗi khi gọi AI Hub: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Đường dẫn file output
 OUTPUT_FILE = "output.json"

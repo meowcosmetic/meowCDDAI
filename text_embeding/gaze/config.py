@@ -40,16 +40,19 @@ except ImportError:
 # Emotion detection đã bị tắt theo yêu cầu
 EMOTION_DETECTION_AVAILABLE = False
 
-# Lazy import MediaPipe - chỉ import khi cần
+# Lazy import MediaPipe
 try:
     import mediapipe as mp
-    mp_face_mesh = mp.solutions.face_mesh
-    mp_drawing = mp.solutions.drawing_utils
+    # Direct access to solutions to avoid AttributeError in some environments
+    from mediapipe.python.solutions import face_mesh as mp_face_mesh_sol
+    from mediapipe.python.solutions import drawing_utils as mp_drawing_sol
+    
+    mp_face_mesh = mp_face_mesh_sol
+    mp_drawing = mp_drawing_sol
     MEDIAPIPE_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError) as e:
     MEDIAPIPE_AVAILABLE = False
-    logger.warning("[Gaze] MediaPipe không được cài đặt. Vui lòng cài: pip install mediapipe")
-    # Tạo dummy để tránh lỗi
+    logger.warning(f"[Gaze] MediaPipe không available hoặc lỗi: {str(e)}")
     mp = None
     mp_face_mesh = None
     mp_drawing = None
@@ -61,25 +64,14 @@ GPU_DEVICE_ID = 0
 
 # Kiểm tra GPU cho OpenCV
 try:
-    # Kiểm tra OpenCV có build với CUDA không
     if cv2.cuda.getCudaEnabledDeviceCount() > 0:
         GPU_AVAILABLE = True
         GPU_DEVICE_ID = Config.GPU_DEVICE_ID if hasattr(Config, 'GPU_DEVICE_ID') else 0
         logger.info(f"[Gaze] ✅ OpenCV GPU detected: {cv2.cuda.getCudaEnabledDeviceCount()} device(s)")
-        logger.info(f"[Gaze] Using GPU device: {GPU_DEVICE_ID}")
     else:
         logger.info("[Gaze] OpenCV không có CUDA support, sử dụng CPU")
 except Exception as e:
     logger.info(f"[Gaze] OpenCV GPU check failed: {str(e)}, sử dụng CPU")
 
-# Kiểm tra GPU cho MediaPipe/PyTorch (nếu có)
-if MEDIAPIPE_AVAILABLE:
-    try:
-        import torch
-        if torch.cuda.is_available() and (USE_GPU == "auto" or USE_GPU == "true"):
-            if not GPU_AVAILABLE:  # Chỉ set nếu OpenCV GPU chưa available
-                GPU_AVAILABLE = True
-            logger.info(f"[Gaze] ✅ PyTorch GPU available: {torch.cuda.get_device_name(0)}")
-    except:
-        pass
+# PyTorch GPU check removed as we consolidated AI libs
 

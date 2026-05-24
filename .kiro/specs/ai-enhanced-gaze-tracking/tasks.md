@@ -372,9 +372,4 @@
   - _Requirements: 8.5, 9.3_
 
 - [x] 17. Final checkpoint - Ensure all tests pass
-
-
-
-
-
   - Ensure all tests pass, ask the user if questions arise.

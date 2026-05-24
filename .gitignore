@@ -57,3 +57,12 @@ transformers_cache/
 # Temporary files
 *.tmp
 *.temp
+
+# YOLO model weights
+*.pt
+
+# Virtual environments (specific)
+venv312/
+
+# Hypothesis test cache
+.hypothesis/

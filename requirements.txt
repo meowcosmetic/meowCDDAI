@@ -1,7 +1,6 @@
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
 qdrant-client>=1.15.0
-sentence-transformers
 pydantic>=2.5.0
 python-multipart>=0.0.6
 psycopg2-binary>=2.9.9
@@ -9,26 +8,20 @@ python-dotenv>=1.0.0
 rank-bm25>=0.2.2
 scikit-learn>=1.3.2
 numpy>=1.24.3
-torch
-transformers
-langchain>=0.1.0
-langchain-core>=0.1.0
-langchain-google-genai>=0.0.6
-langchain-openai>=0.1.0
-langchain-ollama>=0.1.0
-google-generativeai>=0.3.2
 requests>=2.31.0
 
 # Computer Vision libraries for screening modules
-opencv-python>=4.8.0
-# opencv-contrib-python>=4.8.0  # Uncomment nếu muốn GPU support (cần CUDA)
-mediapipe>=0.10.0
+opencv-contrib-python-headless>=4.8.0
+mediapipe==0.10.14
 librosa>=0.10.0
 soundfile>=0.12.0
 moviepy>=1.0.3
 deep-sort-realtime>=1.3.2
 scipy>=1.9.0
 ultralytics>=8.0.0
+# Add torch back for CUDA support in CV tasks
+torch>=2.0.0
+torchvision>=0.15.0
 
 # Testing frameworks
 pytest>=7.0.0
