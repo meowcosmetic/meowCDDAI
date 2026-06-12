@@ -17,15 +17,15 @@ class Config:
     GPU_DEVICE_ID = int(os.getenv("GPU_DEVICE_ID", "0"))  # Which GPU to use (0, 1, 2, ...)
     BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))  # Batch size for encoding
     
-    # Google AI Configuration
-    GOOGLE_AI_API_KEY = "AIzaSyB0FiJmN7021PCM4B2EASfAtY_wXh_muVk"
+    # Google AI Configuration (moved to meowAI - use via meowAI /chat endpoint with provider="google")
+    # GOOGLE_AI_API_KEY is no longer needed here
     
     # Local LLM Configuration
     USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "true").lower() == "true"
     LLM_TYPE = os.getenv("LLM_TYPE", "ollama").lower()  # "ollama" hoặc "openai-compatible"
     
     # Ollama Configuration
-    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
     OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "qwen3:8b")  # Tên model trong Ollama
     
     # OpenAI-compatible API Configuration (nếu dùng vLLM, llama.cpp server, etc.)

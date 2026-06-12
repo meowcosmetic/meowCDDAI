@@ -115,12 +115,21 @@ class QdrantService:
         Search for similar vectors
         """
         try:
-            search_result = self.client.search(
-                collection_name=self.collection_name,
-                query_vector={"name": "content", "vector": query_vector},
-                limit=limit,
-                score_threshold=score_threshold
-            )
+            if hasattr(self.client, "query_points"):
+                search_result = self.client.query_points(
+                    collection_name=self.collection_name,
+                    query=query_vector,
+                    using="content",
+                    limit=limit,
+                    score_threshold=score_threshold
+                ).points
+            else:
+                search_result = self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector={"name": "content", "vector": query_vector},
+                    limit=limit,
+                    score_threshold=score_threshold
+                )
             
             return search_result
         except Exception as e:

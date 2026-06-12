@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class BaseAgent:
     """Base class client cho AI agents - Gọi sang meowAI"""
-    def __init__(self, model_name: str = "gemini-2.0-flash"):
+    def __init__(self, model_name: str = "gemini-3.5-flash"):
         self.model_name = model_name
         self.api_url = f"{Config.MEOW_AI_URL}/cdd/process-intervention"
 
@@ -32,7 +32,7 @@ class InterventionProcessor:
     def __init__(self):
         self.api_url = f"{Config.MEOW_AI_URL}/cdd/process-intervention"
     
-    def process_intervention_goal(self, intervention_goal: str, context: Dict[str, Any] = None) -> Dict[str, str]:
+    def process_intervention_goal(self, intervention_goal: str, context: Dict[str, Any] = None, tone: str = "giáo viên") -> Dict[str, str]:
         """
         Gửi yêu cầu xử lý sang meowAI Central Hub
         """
@@ -43,9 +43,10 @@ class InterventionProcessor:
                 self.api_url,
                 json={
                     "goal": intervention_goal,
-                    "context": context
+                    "context": context,
+                    "tone": tone
                 },
-                timeout=120 # AI processing can be slow
+                timeout=1800 # 30 minutes - AI processing with multiple agents can be slow
             )
             
             if response.status_code != 200:

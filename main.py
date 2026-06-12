@@ -6,7 +6,8 @@ from text_embeding import (
     upload_router, search_router, admin_router, post_router, description_router, 
     question_router, csv_router, question_csv_router,
     screening_gaze_router, screening_expression_router, screening_pose_router,
-    screening_interaction_router, screening_speech_router
+    screening_interaction_router, screening_speech_router,
+    extraction_router, jobs_router
 )
 
 
@@ -42,6 +43,12 @@ app.include_router(screening_expression_router)
 app.include_router(screening_pose_router)
 app.include_router(screening_interaction_router)
 app.include_router(screening_speech_router)
+
+# Mount extraction router
+app.include_router(extraction_router)
+
+# Mount job API router (async pipeline)
+app.include_router(jobs_router)
 
 
 if __name__ == "__main__":

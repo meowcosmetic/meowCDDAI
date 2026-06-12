@@ -23,6 +23,7 @@ class InterventionGoalRequest(BaseModel):
     intervention_goal: str = Field(..., description="Mục tiêu can thiệp cho trẻ đặc biệt")
     title: Optional[str] = Field(default=None, description="Tiêu đề tùy chọn cho bài viết")
     book_content: Optional[List[str]] = Field(default=None, description="Mảng nội dung sách liên quan để làm context")
+    tone: Optional[str] = Field(default="giáo viên", description="Ngữ điệu bài viết (giáo viên hoặc phụ huynh)")
 
 
 @router.post("/create-post", response_model=dict)
@@ -65,7 +66,7 @@ async def process_intervention_goal(payload: InterventionGoalRequest):
             context["book_content"] = payload.book_content
         
         # Xử lý mục tiêu can thiệp qua 4 agents
-        result = processor.process_intervention_goal(payload.intervention_goal, context)
+        result = processor.process_intervention_goal(payload.intervention_goal, context, tone=payload.tone)
         
         if result["status"] == "error":
             raise HTTPException(status_code=500, detail=f"Lỗi khi xử lý: {result['error']}")

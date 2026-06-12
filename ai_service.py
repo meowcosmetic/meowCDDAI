@@ -31,7 +31,7 @@ class AIService:
                     "provider": "ollama", # Default to ollama as configured in meowAI
                     "temperature": 0.7
                 },
-                timeout=120
+                timeout=600
             )
 
             if response.status_code != 200:
