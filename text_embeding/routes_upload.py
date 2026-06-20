@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 import json
 import uuid
 import logging
+import re
 from datetime import datetime
 from qdrant_client.models import PointStruct
 
@@ -46,6 +47,8 @@ async def upload_book_file(
     try:
         logger.info(f"[UPLOAD] Đang đọc file: {file.filename}")
         content = await file.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="File too large (max 10MB)")
         content_str = content.decode("utf-8")
         logger.info(f"[UPLOAD] Đã đọc file: {len(content_str)} bytes")
 
@@ -179,8 +182,8 @@ async def upload_book_file(
         if tags and tags.strip():
             tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
-        default_book_id = file.filename.replace(".txt", "")
-        default_title = file.filename.replace(".txt", "")
+        default_book_id = re.sub(r"[^\w.\-]", "_", file.filename.replace(".txt", ""))
+        default_title = re.sub(r"[^\w.\-]", "_", file.filename.replace(".txt", ""))
 
         book_request_data = {
             "book_id": book_id if book_id else default_book_id,
@@ -221,6 +224,6 @@ async def upload_book_file(
         raise
     except Exception as exc:
         logger.error(f"[UPLOAD] ❌ Lỗi khi xử lý file: {str(exc)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Lỗi khi đọc file: {str(exc)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 

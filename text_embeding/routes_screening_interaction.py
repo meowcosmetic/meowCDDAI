@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 import sys
+from .security import safe_temp_path
 
 # Import config để sử dụng GPU settings
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -611,7 +612,7 @@ async def analyze_interaction(
     temp_path = None
     try:
         # Lưu file tạm
-        temp_path = f"temp_{video.filename}"
+        temp_path = safe_temp_path(video.filename)
         with open(temp_path, "wb") as f:
             content = await video.read()
             f.write(content)

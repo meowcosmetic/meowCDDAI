@@ -5,6 +5,7 @@ import logging
 import cv2
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from .models import GazeAnalysisResponse
+from ..security import safe_temp_path
 # from .processor import process_gaze_analysis  # Tạm thời comment vì đang refactor
 from .config import MEDIAPIPE_AVAILABLE, mp_face_mesh
 
@@ -112,7 +113,7 @@ async def analyze_gaze(
     cap = None
     try:
         # Lưu file tạm
-        temp_path = f"temp_{video.filename}"
+        temp_path = safe_temp_path(video.filename)
         with open(temp_path, "wb") as f:
             content = await video.read()
             f.write(content)

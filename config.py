@@ -38,8 +38,8 @@ class Config:
     POSTGRES_HOST = os.getenv("POSTGRES_HOST", "host.docker.internal")
     POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
     POSTGRES_DB = os.getenv("POSTGRES_DB", "MeowCDD")
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "cdd_app_admin")
-    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "cdd_app_admin")
+    POSTGRES_USER = os.getenv("POSTGRES_USER", "")
+    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
     
     @classmethod
     def get_postgres_params(cls):

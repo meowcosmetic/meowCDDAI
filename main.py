@@ -1,4 +1,5 @@
 print("🚀 MEOW CDD AI VERSION 2.0 STARTING (GPU ENABLED)...")
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,13 +18,19 @@ app = FastAPI(
     version="2.0.0",
 )
 
+# CORS - use allowlist from env, reject wildcard
+_cors_origins_raw = os.getenv("CORS_ORIGINS", "")
+if _cors_origins_raw and _cors_origins_raw.strip() != "*":
+    _cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+else:
+    _cors_origins = ["http://localhost:3101", "http://localhost", "http://127.0.0.1:3101"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 

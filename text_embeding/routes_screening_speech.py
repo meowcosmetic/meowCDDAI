@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 import sys
 import subprocess
 import tempfile
+from .security import safe_temp_path
 
 # Import config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -675,7 +676,7 @@ async def analyze_speech(
     
     try:
         # Lưu file tạm
-        temp_path = f"temp_{file.filename}"
+        temp_path = safe_temp_path(file.filename)
         with open(temp_path, "wb") as f:
             content = await file.read()
             f.write(content)
@@ -688,7 +689,7 @@ async def analyze_speech(
         if is_video:
             logger.info(f"[Speech] File là video ({file_ext}), sẽ extract audio")
             # Extract audio từ video
-            temp_audio_path = f"temp_audio_{file.filename}.wav"
+            temp_audio_path = os.path.join(tempfile.gettempdir(), f"{os.path.basename(temp_path)}.wav")
             extract_audio_from_video(temp_path, temp_audio_path)
             audio_path = temp_audio_path
             temp_video_path = temp_path
