@@ -24,6 +24,10 @@ class Config:
     USE_LOCAL_LLM = os.getenv("USE_LOCAL_LLM", "true").lower() == "true"
     LLM_TYPE = os.getenv("LLM_TYPE", "ollama").lower()  # "ollama" hoặc "openai-compatible"
     
+    # 9router Configuration
+    NINE_ROUTER_BASE_URL = os.getenv("NINE_ROUTER_BASE_URL", "http://host.docker.internal:20128/v1")
+    NINE_ROUTER_API_KEY = os.getenv("NINE_ROUTER_API_KEY", "sk-c8d6110723c02c83-ije15z-b4ea8d82")
+    
     # Ollama Configuration
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
     OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "qwen3:8b")  # Tên model trong Ollama

@@ -54,7 +54,7 @@ class BookUploadRequest(BaseModel):
 class SearchRequest(BaseModel):
     query: str
     limit: int = 10
-    score_threshold: float = 0.7
+    score_threshold: float = 0.85
     alpha: float = 0.7  # Weight for embedding score
     beta: float = 0.3   # Weight for keyword score
     use_hybrid: bool = True  # Enable hybrid search
@@ -63,7 +63,7 @@ class SearchRequest(BaseModel):
 class HybridSearchRequest(BaseModel):
     query: str
     limit: int = 10
-    score_threshold: float = 0.5
+    score_threshold: float = 0.85
     alpha: float = 0.7  # Weight for embedding score
     beta: float = 0.3   # Weight for keyword score
     keyword_fields: List[str] = ["content", "title", "tags"]  # Fields to search with keywords

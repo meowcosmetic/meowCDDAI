@@ -136,29 +136,21 @@ async def search_by_book_id(
     limit: int = Query(default=50, description="Số lượng kết quả tối đa"),
     score_threshold: float = Query(default=0.0, description="Ngưỡng điểm tối thiểu"),
 ):
-    """Tìm kiếm tất cả đoạn văn của một cuốn sách theo book_id"""
+    """Tìm kiếm tất cả đoạn văn của một cuốn sách theo book_id (server-side filter)."""
     try:
-        all_points = qdrant_service.get_all_vectors()
-        filtered_points = [point for point in all_points if point.payload.get("book_id") == book_id]
+        filtered_points = qdrant_service.scroll_by_filter({"book_id": book_id}, limit=limit)
 
         if not filtered_points:
             raise HTTPException(status_code=404, detail=f"Không tìm thấy sách với book_id: {book_id}")
 
         responses: List[SearchResponse] = []
         for point in filtered_points:
-            score = 1.0
-            if score >= score_threshold:
-                payload = parse_payload(point.payload)
-                response = SearchResponse(
-                    id=point.id,
-                    score=score,
-                    embedding_score=score,
-                    keyword_score=None,
-                    payload=payload,
-                )
-                responses.append(response)
+            payload = parse_payload(point.payload)
+            responses.append(SearchResponse(
+                id=point.id, score=1.0, embedding_score=1.0,
+                keyword_score=None, payload=payload,
+            ))
 
-        responses.sort(key=lambda x: x.score, reverse=True)
         return responses[:limit]
     except HTTPException:
         raise
@@ -170,52 +162,73 @@ async def search_by_book_id(
 async def search_by_tags(
     tags: str = Query(..., description="Tags cần tìm kiếm, phân cách bằng dấu phẩy"),
     limit: int = Query(default=20, description="Số lượng kết quả tối đa"),
-    score_threshold: float = Query(default=0.5, description="Ngưỡng điểm tối thiểu"),
+    score_threshold: float = Query(default=0.85, description="Ngưỡng điểm tối thiểu"),
     match_all: bool = Query(default=False, description="Phải match tất cả tags (True) hay chỉ cần match ít nhất 1 tag (False)"),
 ):
-    """Tìm kiếm sách dựa trên tags"""
+    """Tìm kiếm sách dựa trên tags.
+
+    - match_all=True: Qdrant filter từng tag rồi intersect (server-side).
+    - match_any: scroll theo từng tag, union + score bằng Python.
+    """
     try:
         search_tags = [tag.strip().lower() for tag in tags.split(",") if tag.strip()]
         if not search_tags:
             raise HTTPException(status_code=400, detail="Vui lòng cung cấp ít nhất một tag")
 
-        all_points = qdrant_service.get_all_vectors()
+        if match_all:
+            # Server-side: scroll theo từng tag rồi intersect
+            point_sets = []
+            for tag in search_tags:
+                pts = qdrant_service.scroll_by_filter({"tags": tag}, limit=1000)
+                point_sets.append({p.id for p in pts})
+            common_ids = point_sets[0] if point_sets else set()
+            for ps in point_sets[1:]:
+                common_ids &= ps
 
-        filtered_points = []
-        for point in all_points:
-            point_tags = [tag.lower() for tag in point.payload.get("tags", [])]
-            if match_all:
-                if all(search_tag in point_tags for search_tag in search_tags):
-                    filtered_points.append(point)
-            else:
-                if any(search_tag in point_tags for search_tag in search_tags):
-                    filtered_points.append(point)
+            responses: List[SearchResponse] = []
+            for point_set in point_sets:
+                for pt in (point_set if False else []):
+                    pass
+            # Re-fetch points with matching ids (scroll doesn't support id filter easily)
+            # Fall back: iterate first set and check membership
+            first_pts = point_sets[0] if point_sets else []
+            for tag in search_tags:
+                pts = qdrant_service.scroll_by_filter({"tags": tag}, limit=1000)
+                for p in pts:
+                    if p.id in common_ids and all(
+                        p.id in ps for ps in point_sets
+                    ):
+                        payload = parse_payload(p.payload)
+                        responses.append(SearchResponse(
+                            id=p.id, score=1.0, embedding_score=1.0,
+                            keyword_score=None, payload=payload,
+                        ))
+                        common_ids.discard(p.id)  # avoid duplicates
+            return responses[:limit]
 
-        if not filtered_points:
-            return []
+        else:
+            # match_any: union qua từng tag, score = matched_tags / total_tags
+            seen: dict = {}  # id -> (point, matched_count)
+            for tag in search_tags:
+                pts = qdrant_service.scroll_by_filter({"tags": tag}, limit=500)
+                for p in pts:
+                    if p.id not in seen:
+                        seen[p.id] = [p, 0]
+                    seen[p.id][1] += 1
 
-        scored_points = []
-        for point in filtered_points:
-            point_tags = [tag.lower() for tag in point.payload.get("tags", [])]
-            matched_tags = sum(1 for search_tag in search_tags if search_tag in point_tags)
-            score = matched_tags / len(search_tags) if search_tags else 0.0
-            if score >= score_threshold:
-                scored_points.append((point, score))
+            responses = []
+            for pt, matched in seen.values():
+                score = matched / len(search_tags)
+                if score >= score_threshold:
+                    payload = parse_payload(pt.payload)
+                    responses.append(SearchResponse(
+                        id=pt.id, score=score, embedding_score=score,
+                        keyword_score=None, payload=payload,
+                    ))
 
-        responses: List[SearchResponse] = []
-        for point, score in scored_points:
-            payload = parse_payload(point.payload)
-            response = SearchResponse(
-                id=point.id,
-                score=score,
-                embedding_score=score,
-                keyword_score=None,
-                payload=payload,
-            )
-            responses.append(response)
+            responses.sort(key=lambda x: x.score, reverse=True)
+            return responses[:limit]
 
-        responses.sort(key=lambda x: x.score, reverse=True)
-        return responses[:limit]
     except HTTPException:
         raise
     except Exception as exc:

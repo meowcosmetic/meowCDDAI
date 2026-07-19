@@ -2,14 +2,12 @@ from typing import List
 
 from embedding_service import EmbeddingService
 from qdrant_service import QdrantService
-from text_processor import TextProcessor
 from hybrid_search_service import HybridSearchService
 
 
 # Initialize shared services (simple singletons for app lifetime)
 embedding_service = EmbeddingService()
 qdrant_service = QdrantService()
-text_processor = TextProcessor()
 hybrid_search_service = HybridSearchService(embedding_service, qdrant_service)
 
 

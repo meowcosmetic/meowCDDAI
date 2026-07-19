@@ -6,7 +6,6 @@ import logging
 import time
 from datetime import datetime
 from config import Config
-from models import BookPayload, BookVector
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -56,13 +55,12 @@ class QdrantService:
                 exists = False
             
             if not exists:
-                # Create collection with 1024 dimensions for two named vectors
+                # Create collection with single "content" vector (1024D)
                 logger.info(f"[QDRANT] Đang tạo mới collection: {self.collection_name}")
                 try:
                     self.client.create_collection(
                         collection_name=self.collection_name,
                         vectors_config={
-                            "summary": VectorParams(size=1024, distance=Distance.COSINE),
                             "content": VectorParams(size=1024, distance=Distance.COSINE),
                         },
                     )
@@ -76,40 +74,7 @@ class QdrantService:
             logger.error(f"[QDRANT] ❌ Lỗi khi tạo/kiểm tra collection: {str(e)}")
             # Không raise ở đây để tránh crash app nếu Qdrant chưa sẵn sàng lúc khởi động
             # Nhưng sẽ check lại lúc thực hiện thao tác
-    
-    def add_book_vectors(self, book_vectors: List[BookVector]) -> List[str]:
-        """
-        Add multiple book vectors to the collection
-        """
-        if not book_vectors:
-            return []
-            
-        try:
-            points = []
-            for book_vector in book_vectors:
-                point = PointStruct(
-                    id=book_vector.id,
-                    vector=book_vector.vector,
-                    payload=book_vector.payload.dict()
-                )
-                points.append(point)
-            
-            self.client.upsert(
-                collection_name=self.collection_name,
-                points=points
-            )
-            
-            return [bv.id for bv in book_vectors]
-        except Exception as e:
-            print(f"Error adding book vectors: {e}")
-            raise
-    
-    def add_single_book_vector(self, book_vector: BookVector) -> str:
-        """
-        Add a single book vector to the collection
-        """
-        return self.add_book_vectors([book_vector])[0]
-    
+
     def search_similar(self, query_vector: List[float], limit: int = 10, score_threshold: float = 0.7):
         """
         Search for similar vectors
@@ -134,6 +99,26 @@ class QdrantService:
             return search_result
         except Exception as e:
             print(f"Error searching similar vectors: {e}")
+            return []
+
+    def scroll_by_filter(self, filters: dict, limit: int = 50):
+        """Scroll points matching payload filters (server-side, không load all)."""
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        try:
+            must_conditions = [
+                FieldCondition(key=key, match=MatchValue(value=val))
+                for key, val in filters.items()
+            ]
+            points, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(must=must_conditions),
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+            return points or []
+        except Exception as e:
+            logger.error(f"[QDRANT] Error scrolling by filter: {e}")
             return []
 
     def upsert_named_points(self, points: List[PointStruct]) -> List[str]:

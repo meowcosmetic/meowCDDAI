@@ -16,7 +16,7 @@ class AIService:
 
     def chat(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """
-        Send a chat request to meowAI
+        Send a chat request to 9router directly
         """
         try:
             messages = []
@@ -24,13 +24,19 @@ class AIService:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
 
+            headers = {
+                "Authorization": f"Bearer {Config.NINE_ROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            }
+
             response = requests.post(
-                f"{self.meow_ai_url}/chat",
+                f"{Config.NINE_ROUTER_BASE_URL}/chat/completions",
                 json={
+                    "model": "my-combo",
                     "messages": messages,
-                    "provider": "ollama", # Default to ollama as configured in meowAI
                     "temperature": 0.7
                 },
+                headers=headers,
                 timeout=600
             )
 
@@ -39,7 +45,10 @@ class AIService:
                 return f"Error from AI Service: {response.text}"
 
             data = response.json()
-            return data.get("content", "")
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+            return ""
 
         except Exception as e:
             logger.error(f"[AI-SERVICE] ❌ Connection error: {str(e)}")
