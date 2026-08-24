@@ -25,5 +25,4 @@ torchvision>=0.15.0
 
 # Testing frameworks
 pytest>=7.0.0
-pytest-hypothesis>=0.19.0
 hypothesis>=6.0.0

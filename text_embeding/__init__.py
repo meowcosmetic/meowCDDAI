@@ -13,6 +13,7 @@ from .routes_screening_interaction import router as screening_interaction_router
 from .routes_screening_speech import router as screening_speech_router
 from .routes_extraction import router as extraction_router
 from .routes_jobs import router as jobs_router
+from .routes_asq_ai import router as asq_ai_router
 
 __all__ = [
     "upload_router",
@@ -30,6 +31,7 @@ __all__ = [
     "screening_speech_router",
     "extraction_router",
     "jobs_router",
+    "asq_ai_router",
 ]
 
 

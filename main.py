@@ -8,7 +8,7 @@ from text_embeding import (
     question_router, csv_router, question_csv_router,
     screening_gaze_router, screening_expression_router, screening_pose_router,
     screening_interaction_router, screening_speech_router,
-    extraction_router, jobs_router
+    extraction_router, jobs_router, asq_ai_router
 )
 
 
@@ -56,6 +56,9 @@ app.include_router(extraction_router)
 
 # Mount job API router (async pipeline)
 app.include_router(jobs_router)
+
+# Mount ASQ-3 AI Assessment router
+app.include_router(asq_ai_router)
 
 
 if __name__ == "__main__":
