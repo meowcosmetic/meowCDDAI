@@ -13,11 +13,19 @@ import math
 import logging
 from typing import Dict, List, Any, Optional
 import numpy as np
-import pandas as pd
-import joblib
+
+try:
+    import joblib
+except ImportError:
+    joblib = None
 
 # Configure Logger with UTF-8 safe handling
-sys.stdout.reconfigure(encoding='utf-8')
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 logger = logging.getLogger("asq_hybrid_ai")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
@@ -201,13 +209,18 @@ class AsqAiService:
             model_path = os.path.join(models_dir, "asq_risk_model.joblib")
             scaler_path = os.path.join(models_dir, "asq_scaler.joblib")
 
-            if os.path.exists(model_path) and os.path.exists(scaler_path):
-                logger.info(f"Loading trained ASQ-3 ML Model from: {model_path}")
-                cls._ml_model_artifact = joblib.load(model_path)
-                cls._ml_scaler = joblib.load(scaler_path)
-                logger.info(f"ML Model loaded successfully. Metrics: {cls._ml_model_artifact.get('metrics', {})}")
+            if os.path.exists(model_path) and os.path.exists(scaler_path) and joblib is not None:
+                try:
+                    logger.info(f"Loading trained ASQ-3 ML Model from: {model_path}")
+                    cls._ml_model_artifact = joblib.load(model_path)
+                    cls._ml_scaler = joblib.load(scaler_path)
+                    logger.info(f"ML Model loaded successfully. Metrics: {cls._ml_model_artifact.get('metrics', {})}")
+                except Exception as e:
+                    logger.warning(f"Could not load ML Model joblib (version mismatch: {e}). Fallback to Clinical Normative Model.")
+                    cls._ml_model_artifact = False
             else:
                 logger.warning(f"ML Model artifact not found at {model_path}. Running with fallback normative estimator.")
+                cls._ml_model_artifact = False
 
     @classmethod
     def predict_asq_risk(cls, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -283,18 +296,18 @@ class AsqAiService:
 
         if cls._ml_model_artifact and cls._ml_scaler:
             try:
-                feature_df = pd.DataFrame([{
-                    "age_interval_months": age_interval,
-                    "is_premature": is_premature,
-                    "score_communication": float(domain_scores.get("COMMUNICATION", 50.0)),
-                    "score_gross_motor": float(domain_scores.get("GROSS_MOTOR", 50.0)),
-                    "score_fine_motor": float(domain_scores.get("FINE_MOTOR", 50.0)),
-                    "score_problem_solving": float(domain_scores.get("PROBLEM_SOLVING", 50.0)),
-                    "score_personal_social": float(domain_scores.get("PERSONAL_SOCIAL", 50.0)),
-                    "total_score": total_score
-                }], columns=FEATURE_COLS)
+                features = np.array([[
+                    float(age_interval),
+                    float(is_premature),
+                    float(domain_scores.get("COMMUNICATION", 50.0)),
+                    float(domain_scores.get("GROSS_MOTOR", 50.0)),
+                    float(domain_scores.get("FINE_MOTOR", 50.0)),
+                    float(domain_scores.get("PROBLEM_SOLVING", 50.0)),
+                    float(domain_scores.get("PERSONAL_SOCIAL", 50.0)),
+                    float(total_score)
+                ]], dtype=np.float32)
 
-                feature_scaled = cls._ml_scaler.transform(feature_df)
+                feature_scaled = cls._ml_scaler.transform(features)
                 model = cls._ml_model_artifact["model"]
 
                 proba = model.predict_proba(feature_scaled)[0]
@@ -331,6 +344,7 @@ class AsqAiService:
             "overall_status": overall_status,
             "delay_risk_probability": round(combined_risk, 3),
             "overall_delay_risk": round(combined_risk, 3),
+            "confidence_score": round(ml_confidence, 3),
             "ml_model_prediction": {
                 "model_type": "GradientBoostingClassifier (1,523 ASQ-3 Dataset)",
                 "delay_risk_prob": round(ml_risk_prob, 3),
