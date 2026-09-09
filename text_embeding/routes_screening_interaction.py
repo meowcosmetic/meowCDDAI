@@ -21,7 +21,7 @@ try:
     mp_hands = mp.solutions.hands
     mp_drawing = mp.solutions.drawing_utils
     MEDIAPIPE_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
     MEDIAPIPE_AVAILABLE = False
     logger.warning("[Interaction] MediaPipe không được cài đặt. Vui lòng cài: pip install mediapipe")
     mp = None

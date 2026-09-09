@@ -318,25 +318,35 @@ class AsqAiService:
             except Exception as ex:
                 logger.error(f"Error during ML model inference: {ex}", exc_info=True)
 
+        DOMAIN_NAMES_VI = {
+            "COMMUNICATION": "Giao tiếp & Ngôn ngữ",
+            "GROSS_MOTOR": "Vận động thô",
+            "FINE_MOTOR": "Vận động tinh",
+            "PROBLEM_SOLVING": "Giải quyết vấn đề / Nhận thức",
+            "PERSONAL_SOCIAL": "Cá nhân - Xã hội"
+        }
+
         # =========================================================================
         # 3. BỘ ĐỒNG THUẬN KẾT HỢP HYBRID (Hybrid Ensemble Consensus)
         # =========================================================================
         if is_asd_anomaly:
             combined_risk = max(0.88, ml_risk_prob)
             overall_status = "INTERVENTION_RECOMMENDED"
-            recommendation = "Cảnh báo AI: Phát hiện hình thái phân ly Giao tiếp & Xã hội suy giảm rõ rệt so với Vận động. Khuyến nghị thực hiện bài test chuyên biệt M-CHAT-R/F."
+            recommendation = "CẢNH BÁO PHÂN TÍCH SƠ BỘ: Phát hiện sự chênh lệch lớn giữa Vận động và Ngôn ngữ/Cảm xúc xã hội. Khuyến nghị phụ huynh thực hiện bảng sàng lọc M-CHAT-R và đặt lịch tư vấn chuyên gia tâm lý MEOW."
         elif black_zones:
             combined_risk = max(0.85, ml_risk_prob)
             overall_status = "INTERVENTION_RECOMMENDED"
-            recommendation = f"Hệ thống ghi nhận {len(black_zones)} lĩnh vực ở Vùng Đen (-2 SD) ({', '.join(black_zones)}). Cần kích hoạt lộ trình can thiệp sớm và tái đánh giá định kỳ."
+            black_zones_vi = [DOMAIN_NAMES_VI.get(d, d) for d in black_zones]
+            recommendation = f"KẾT QUẢ PHÂN TÍCH SƠ BỘ: Trẻ có điểm số rơi vào vùng nguy cơ tại lĩnh vực: {', '.join(black_zones_vi)}. Đã kích hoạt kế hoạch can thiệp sớm và phân bổ bài tập tăng cường."
         elif gray_zones:
             combined_risk = max(0.40, ml_risk_prob)
             overall_status = "MONITORING_REQUIRED"
-            recommendation = f"Ghi nhận {len(gray_zones)} lĩnh vực ở Vùng Xám (-1 SD) ({', '.join(gray_zones)}). Khuyến nghị phụ huynh tăng cường các bài tập hỗ trợ tại nhà."
+            gray_zones_vi = [DOMAIN_NAMES_VI.get(d, d) for d in gray_zones]
+            recommendation = f"KẾT QUẢ PHÂN TÍCH SƠ BỘ: Trẻ đang ở vùng cần theo dõi tại lĩnh vực: {', '.join(gray_zones_vi)}. Khuyến nghị phụ huynh tăng cường các bài tập hỗ trợ tại nhà."
         else:
             combined_risk = min(0.10, ml_risk_prob)
             overall_status = "TYPICAL"
-            recommendation = "Trẻ đang phát triển theo đúng chuẩn mực lứa tuổi. Tiếp tục duy trì các hoạt động tương tác rèn luyện hàng ngày."
+            recommendation = "KẾT QUẢ PHÂN TÍCH SƠ BỘ: Trẻ đạt mốc phát triển toàn diện xuất sắc trên cả 5 lĩnh vực theo tiêu chuẩn quốc tế ASQ-3."
 
         logger.info(f"Hybrid Consensus Result: Status = {overall_status}, Combined Risk = {combined_risk:.2%}")
 

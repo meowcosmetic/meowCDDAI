@@ -60,6 +60,21 @@ app.include_router(jobs_router)
 # Mount ASQ-3 AI Assessment router
 app.include_router(asq_ai_router)
 
+# Mount unified CDD intervention & assessment routers
+from routers.speech_assessment import router as speech_assessment_router
+from routers.worksheet_analysis import router as worksheet_analysis_router
+from routers.social_story import router as social_story_router
+from routers.telemetry import router as telemetry_router
+from routers.clinical_scribe import router as clinical_scribe_router
+from routers.child_harness import router as child_harness_router
+
+app.include_router(speech_assessment_router)
+app.include_router(worksheet_analysis_router)
+app.include_router(social_story_router)
+app.include_router(telemetry_router)
+app.include_router(clinical_scribe_router)
+app.include_router(child_harness_router)
+
 
 if __name__ == "__main__":
     import uvicorn

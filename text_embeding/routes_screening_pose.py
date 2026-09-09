@@ -21,7 +21,7 @@ try:
     mp_drawing = mp.solutions.drawing_utils
     mp_drawing_styles = mp.solutions.drawing_styles
     MEDIAPIPE_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
     MEDIAPIPE_AVAILABLE = False
     logger.warning("[Pose] MediaPipe không được cài đặt. Vui lòng cài: pip install mediapipe")
     mp = None

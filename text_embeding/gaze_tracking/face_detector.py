@@ -40,7 +40,7 @@ class MediaPipeFaceDetector:
                 min_tracking_confidence=0.5
             )
             logger.info("[FaceDetector] MediaPipe Face Mesh initialized")
-        except ImportError:
+        except (ImportError, AttributeError):
             logger.warning("[FaceDetector] MediaPipe không có, sẽ dùng OpenCV fallback")
             self.face_mesh = None
     

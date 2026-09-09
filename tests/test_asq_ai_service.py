@@ -49,7 +49,7 @@ def test_predict_asq_risk_gross_motor_delay():
     assert result["overall_status"] == "INTERVENTION_RECOMMENDED"
     assert result["overall_delay_risk"] > 0.80
     assert result["domain_predictions"]["GROSS_MOTOR"]["zone"] == "BLACK"
-    assert "GROSS_MOTOR" in result["clinical_recommendation"]
+    assert "GROSS_MOTOR" in result["clinical_recommendation"] or "Vận động thô" in result["clinical_recommendation"]
 
 
 def test_predict_asq_risk_asd_anomaly_pattern():

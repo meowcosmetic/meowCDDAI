@@ -20,7 +20,7 @@ try:
     mp_face_mesh = mp.solutions.face_mesh
     mp_drawing = mp.solutions.drawing_utils
     MEDIAPIPE_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
     MEDIAPIPE_AVAILABLE = False
     logger.warning("[Expression] MediaPipe không được cài đặt. Vui lòng cài: pip install mediapipe")
     mp = None
