@@ -158,6 +158,15 @@ class QdrantService:
             logger.error(f"[QDRANT] ❌ Lỗi khi upsert points: {str(e)}", exc_info=True)
             raise
     
+    def delete_points(self, point_ids: List[str]) -> None:
+        """Delete a known ingestion batch during compensating cleanup."""
+        if not point_ids:
+            return
+        self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=point_ids,
+        )
+
     def get_all_vectors(self, limit: int = 10000):
         """
         Get all vectors from the collection for building keyword index

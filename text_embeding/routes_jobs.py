@@ -18,8 +18,11 @@ Requirements: 1.1, 1.2, 1.5, 1.6, 4.1, 5.4.
 
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
 from pydantic import BaseModel
+
+from config import Config
+from job_repository import JobRepositoryError
 
 from job_repository import job_repository
 from job_runner import job_runner
@@ -39,6 +42,7 @@ class DescribeAsyncRequest(BaseModel):
     confirmed_content: str
     tone: str = "giáo viên"
     context: Optional[dict] = None
+    selected_sources: List[dict] = []
     skip_extraction: bool = False
 
 
@@ -61,18 +65,22 @@ class JobStatusResponse(BaseModel):
     response_model=JobCreatedResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def extract_async(req: ExtractAsyncRequest, background_tasks: BackgroundTasks):
+async def extract_async(
+    req: ExtractAsyncRequest,
+    background_tasks: BackgroundTasks,
+    x_user_id: Optional[str] = Header(default=None),
+):
     """Tạo job trích lọc và chạy nền; trả `job_id` ngay (202). (Requirements 1.1, 1.2)"""
     if not req.intervention_goal or not req.intervention_goal.strip():
         raise HTTPException(status_code=400, detail="intervention_goal must not be empty")
 
-    job_id = job_repository.create_job(
-        "extraction",
-        {
-            "intervention_goal": req.intervention_goal,
-            "raw_content": req.raw_content,
-        },
-    )
+    input_data = {
+        "intervention_goal": req.intervention_goal,
+        "raw_content": req.raw_content,
+    }
+    if x_user_id:
+        input_data["owner_id"] = x_user_id
+    job_id = job_repository.create_job("extraction", input_data)
 
     # FastAPI BackgroundTasks hỗ trợ schedule coroutine function: truyền hàm
     # coroutine + job_id, KHÔNG gọi/await tại đây để trả về ngay.
@@ -86,20 +94,25 @@ async def extract_async(req: ExtractAsyncRequest, background_tasks: BackgroundTa
     response_model=JobCreatedResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def describe_async(req: DescribeAsyncRequest, background_tasks: BackgroundTasks):
+async def describe_async(
+    req: DescribeAsyncRequest,
+    background_tasks: BackgroundTasks,
+    x_user_id: Optional[str] = Header(default=None),
+):
     """Tạo job sinh mô tả chi tiết và chạy nền; trả `job_id` ngay (202). (Requirement 4.1)"""
     if not req.confirmed_content or not req.confirmed_content.strip():
         raise HTTPException(status_code=400, detail="confirmed_content must not be empty")
 
-    job_id = job_repository.create_job(
-        "description",
-        {
-            "confirmed_content": req.confirmed_content,
-            "tone": req.tone,
-            "context": req.context,
-            "skip_extraction": req.skip_extraction,
-        },
-    )
+    input_data = {
+        "confirmed_content": req.confirmed_content,
+        "tone": req.tone,
+        "context": req.context,
+        "selected_sources": req.selected_sources,
+        "skip_extraction": req.skip_extraction,
+    }
+    if x_user_id:
+        input_data["owner_id"] = x_user_id
+    job_id = job_repository.create_job("description", input_data)
 
     background_tasks.add_task(job_runner.run_description, job_id)
 
@@ -107,11 +120,25 @@ async def describe_async(req: DescribeAsyncRequest, background_tasks: Background
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
-async def get_job(job_id: str):
-    """Trả trạng thái hiện tại của job theo `job_id`. (Requirements 1.5, 1.6, 5.4)"""
-    job = job_repository.get_job(job_id)
+async def get_job(
+    job_id: str,
+    x_user_id: Optional[str] = Header(default=None),
+):
+    """Trả trạng thái job; nếu có owner thì chỉ owner tương ứng được đọc."""
+    try:
+        job = job_repository.get_job(job_id)
+    except JobRepositoryError:
+        raise HTTPException(status_code=503, detail="Job store unavailable")
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    owner_id = (job.get("input") or {}).get("owner_id")
+    if owner_id and owner_id != x_user_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if owner_id is None and x_user_id is not None:
+        # Legacy jobs without ownership metadata remain readable for the
+        # authenticated internal caller; new jobs always persist owner_id.
+        pass
 
     return JobStatusResponse(
         status=job.get("status"),

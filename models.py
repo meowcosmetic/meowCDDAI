@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 import uuid
 
 class BookPayload(BaseModel):
@@ -13,18 +13,63 @@ class BookPayload(BaseModel):
     postgres_id: Optional[int] = None
     prev_content: Optional[str] = None
     next_content: Optional[str] = None
+    link_refs: Optional[List[Dict[str, Any]]] = None
+    record_type: Optional[str] = None
+    source_book_number: Optional[int] = None
+    domain: Optional[str] = None
+    skill_codes: Optional[List[str]] = None
+    age_ranges: Optional[List[str]] = None
+    linked_book_ids: Optional[List[str]] = None
+    linked_sections: Optional[List[str]] = None
+    table_page: Optional[float] = None
+    pdf_physical_page: Optional[int] = None
+    printed_page: Optional[int] = None
+    printed_page_candidates: Optional[List[int]] = None
+    visual_assets: Optional[Dict[str, Any]] = None
+    extraction_status: Optional[str] = None
+    needs_visual_review: Optional[bool] = None
+    source_json_row_indices: Optional[List[int]] = None
+    source_match_score: Optional[float] = None
+    content_sha256: Optional[str] = None
+    source_type: Optional[str] = None
+    source_notice: Optional[str] = None
 
 class MeowBookItem(BaseModel):
-    """Mô hình dữ liệu cho sách Meow CDD"""
+    """Mô hình dữ liệu cho sách Meow CDD.
+
+    Qdrant chỉ index một vector ``content``. ``summary`` là metadata text,
+    không phải một named vector thứ hai.
+    """
     Book: Optional[str] = ""
     Chapter: Optional[str] = ""
     Page: Optional[float] = 0.0
     Content: Optional[str] = ""
+    Summary: Optional[str] = ""
     Link: Optional[str] = ""
     CleanedContent: Optional[str] = ""
     SearchQueries: Optional[List[str]] = []
+    link_refs: Optional[List[Dict[str, Any]]] = None
+    record_type: Optional[str] = None
+    source_book_number: Optional[int] = None
+    domain: Optional[str] = None
+    skill_codes: Optional[List[str]] = None
+    age_ranges: Optional[List[str]] = None
+    linked_book_ids: Optional[List[str]] = None
+    linked_sections: Optional[List[str]] = None
+    table_page: Optional[float] = None
     Debug_RawCleaner: Optional[str] = None
     Debug_RawQuery: Optional[str] = None
+    pdf_physical_page: Optional[int] = None
+    printed_page: Optional[int] = None
+    printed_page_candidates: Optional[List[int]] = None
+    visual_assets: Optional[Dict[str, Any]] = None
+    extraction_status: Optional[str] = None
+    needs_visual_review: Optional[bool] = None
+    source_json_row_indices: Optional[List[int]] = None
+    source_match_score: Optional[float] = None
+    content_sha256: Optional[str] = None
+    source_type: Optional[str] = None
+    source_notice: Optional[str] = None
 
     @field_validator('Page', mode='before')
     @classmethod

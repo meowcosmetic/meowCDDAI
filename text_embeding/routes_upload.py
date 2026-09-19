@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 import json
-import uuid
+import hashlib
 import logging
 from datetime import datetime
 from qdrant_client.models import PointStruct
@@ -23,6 +23,27 @@ logging.basicConfig(
 
 
 router = APIRouter()
+
+
+def _stable_point_id(book_id: str, book_name: str, chapter: str, page: float, content: str) -> str:
+    """Create a deterministic Qdrant point id for retry-safe book uploads."""
+    identity = "|".join([
+        str(book_id),
+        str(book_name),
+        str(chapter),
+        str(page),
+        hashlib.sha256(content.encode("utf-8")).hexdigest(),
+    ])
+    # Qdrant accepts UUID strings; use the first 32 hex chars as a UUID-shaped id.
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
+    return f"{digest[:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:32]}"
+
+
+def _summary_for_item(item: MeowBookItem) -> str:
+    """Return explicit summary metadata without creating a second vector."""
+    if item.Summary and item.Summary.strip():
+        return item.Summary.strip()
+    return f"{item.Book or 'Unknown'} - {item.Chapter or ''} (Trang {item.Page or 0.0})"
 
 
 @router.post("/upload-book-file")
@@ -86,15 +107,39 @@ async def upload_book_file(
 
                 points = []
                 for i, item in enumerate(meow_items):
-                    point_id = str(uuid.uuid4())
                     payload = {
                         "book_id": book_id or item.Book or "Unknown",
                         "book_name": item.Book or "Unknown",
                         "chapter": item.Chapter or "",
                         "page": item.Page or 0.0,
+                        "summary": _summary_for_item(item),
                         "content": item.CleanedContent or "",
-                        "postgres_id": pg_ids[i] if pg_ids and i < len(pg_ids) else None
+                        "postgres_id": pg_ids[i] if pg_ids and i < len(pg_ids) else None,
+                        "link_refs": item.link_refs or [],
+                        "record_type": item.record_type,
+                        "source_book_number": item.source_book_number,
+                        "domain": item.domain,
+                        "skill_codes": item.skill_codes or [],
+                        "age_ranges": item.age_ranges or [],
+                        "linked_book_ids": item.linked_book_ids or [],
+                        "linked_sections": item.linked_sections or [],
+                        "table_page": item.table_page or item.Page or 0.0,
+                        "pdf_physical_page": item.pdf_physical_page,
+                        "printed_page": item.printed_page,
+                        "printed_page_candidates": item.printed_page_candidates or [],
+                        "visual_assets": item.visual_assets or {},
+                        "extraction_status": item.extraction_status,
+                        "needs_visual_review": item.needs_visual_review or False,
+                        "source_json_row_indices": item.source_json_row_indices or [],
+                        "source_match_score": item.source_match_score,
+                        "content_sha256": item.content_sha256,
+                        "source_type": item.source_type,
+                        "source_notice": item.source_notice,
                     }
+                    point_id = _stable_point_id(
+                        payload["book_id"], payload["book_name"], payload["chapter"],
+                        payload["page"], payload["content"],
+                    )
                     point = PointStruct(
                         id=point_id,
                         vector={"content": embeddings[i]},
@@ -103,8 +148,14 @@ async def upload_book_file(
                     points.append(point)
                 
                 logger.info(f"[UPLOAD] Đang upsert {len(points)} points vào Qdrant...")
-                vector_ids = qdrant_service.upsert_named_points(points)
-                
+                try:
+                    vector_ids = qdrant_service.upsert_named_points(points)
+                except Exception:
+                    # Compensating cleanup prevents a failed vector write from
+                    # leaving Postgres rows that cannot provide valid neighbors.
+                    postgres_service.delete_book_items([x for x in pg_ids or [] if x is not None])
+                    raise
+
                 keyword_index_needs_rebuild = True
                 
                 return {
@@ -141,15 +192,28 @@ async def upload_book_file(
 
                 points = []
                 for i in range(len(items_raw)):
-                    point_id = str(uuid.uuid4())
                     payload = {
                         "book_id": book_id,
                         "book_name": items_raw[i].get("book_name", book_id),
                         "chapter": items_raw[i].get("chapter", ""),
                         "page": items_raw[i].get("page", 0.0),
+                        "summary": items_raw[i].get("summary", ""),
                         "content": contents[i],
                         "postgres_id": pg_ids[i] if pg_ids and i < len(pg_ids) else None,
+                        "link_refs": [],
+                        "record_type": None,
+                        "source_book_number": None,
+                        "domain": None,
+                        "skill_codes": [],
+                        "age_ranges": [],
+                        "linked_book_ids": [],
+                        "linked_sections": [],
+                        "table_page": items_raw[i].get("page", 0.0),
                     }
+                    point_id = _stable_point_id(
+                        payload["book_id"], payload["book_name"], payload["chapter"],
+                        payload["page"], payload["content"],
+                    )
                     point = PointStruct(
                         id=point_id,
                         vector={"content": content_vectors[i]},
@@ -157,7 +221,11 @@ async def upload_book_file(
                     )
                     points.append(point)
 
-                vector_ids = qdrant_service.upsert_named_points(points)
+                try:
+                    vector_ids = qdrant_service.upsert_named_points(points)
+                except Exception:
+                    postgres_service.delete_book_items([x for x in pg_ids or [] if x is not None])
+                    raise
                 keyword_index_needs_rebuild = True
 
                 return {

@@ -92,22 +92,29 @@ class JobRunner:
             )
             # resp -> {extracted_content, confidence, sources, low_confidence,
             #          batch_count?, rounds_used?}
-            self.repo.set_result(job_id, resp)
-            self.repo.update_progress(
-                job_id,
-                {
-                    "phase": "completed",
-                    "batch_count": resp.get("batch_count"),
-                    "rounds_used": resp.get("rounds_used"),
-                    "low_confidence": resp.get("low_confidence", False),
-                },
-            )
-            self.repo.update_status(job_id, "completed")
+            progress = {
+                "phase": "completed",
+                "batch_count": resp.get("batch_count"),
+                "rounds_used": resp.get("rounds_used"),
+                "low_confidence": resp.get("low_confidence", False),
+            }
+            complete_job = getattr(self.repo, "complete_job", None)
+            if complete_job is not None:
+                complete_job(job_id, resp, progress)
+            else:
+                self.repo.set_result(job_id, resp)
+                self.repo.update_progress(job_id, progress)
+                self.repo.update_status(job_id, "completed")
             logger.info(f"[JOB_RUNNER] ✅ Extraction job {job_id} completed")
         except Exception as e:
             logger.error(f"[JOB_RUNNER] ❌ Extraction job {job_id} failed: {str(e)}")
-            self.repo.set_error(job_id, str(e))
-            self.repo.update_status(job_id, "failed")
+            fail_job = getattr(self.repo, "fail_job", None)
+            if fail_job is not None:
+                fail_job(job_id, str(e))
+            else:
+                # Backward-compatible seam for small test fakes/older adapters.
+                self.repo.set_error(job_id, str(e))
+                self.repo.update_status(job_id, "failed")
 
     async def run_description(self, job_id: str):
         """Chạy job sinh mô tả chi tiết: gọi `POST /cdd/process-intervention`.
@@ -132,26 +139,37 @@ class JobRunner:
                 "/cdd/process-intervention",
                 {
                     "goal": job_input.get("confirmed_content"),
-                    "context": job_input.get("context"),
+                    "context": {
+                        **(job_input.get("context") or {}),
+                        **({"selected_sources": job_input["selected_sources"]}
+                           if job_input.get("selected_sources") else {}),
+                    },
                     "tone": job_input.get("tone", "giáo viên"),
                 },
             )
             # resp -> {expert_analysis, practical_content, verified_content,
             #          final_content, workflow_summary, low_confidence}
-            self.repo.set_result(job_id, resp)
-            self.repo.update_progress(
-                job_id,
-                {
-                    "phase": "completed",
-                    "low_confidence": resp.get("low_confidence", False),
-                },
-            )
-            self.repo.update_status(job_id, "completed")
+            progress = {
+                "phase": "completed",
+                "low_confidence": resp.get("low_confidence", False),
+            }
+            complete_job = getattr(self.repo, "complete_job", None)
+            if complete_job is not None:
+                complete_job(job_id, resp, progress)
+            else:
+                self.repo.set_result(job_id, resp)
+                self.repo.update_progress(job_id, progress)
+                self.repo.update_status(job_id, "completed")
             logger.info(f"[JOB_RUNNER] ✅ Description job {job_id} completed")
         except Exception as e:
             logger.error(f"[JOB_RUNNER] ❌ Description job {job_id} failed: {str(e)}")
-            self.repo.set_error(job_id, str(e))
-            self.repo.update_status(job_id, "failed")
+            fail_job = getattr(self.repo, "fail_job", None)
+            if fail_job is not None:
+                fail_job(job_id, str(e))
+            else:
+                # Backward-compatible seam for small test fakes/older adapters.
+                self.repo.set_error(job_id, str(e))
+                self.repo.update_status(job_id, "failed")
 
 
 # Module-level singleton — Job API (task 6.1) sẽ schedule các method này

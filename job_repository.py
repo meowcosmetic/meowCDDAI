@@ -19,7 +19,12 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 
+class JobRepositoryError(RuntimeError):
+    """Raised when the job store cannot be read or updated."""
+
+
 class JobRepository:
+
     """Repository cho bảng `intervention_jobs` trên CDD database."""
 
     def __init__(self):
@@ -150,7 +155,7 @@ class JobRepository:
             return job
         except Exception as e:
             logger.error(f"[JOB_REPO] ❌ Error getting job {job_id}: {str(e)}")
-            return None
+            raise JobRepositoryError("Job store unavailable") from e
         finally:
             if conn:
                 conn.close()
@@ -198,6 +203,62 @@ class JobRepository:
     def set_error(self, job_id: str, message: str):
         """Lưu error_message + updated_at."""
         self._update_field(job_id, "error_message", message)
+
+    def complete_job(self, job_id: str, result: dict, progress: dict):
+        """Commit result, progress and terminal status in one transaction."""
+        self._finish_job(job_id, status="completed", result=result, progress=progress)
+
+    def fail_job(self, job_id: str, message: str, progress: dict | None = None):
+        """Commit error, progress and terminal status in one transaction."""
+        self._finish_job(
+            job_id,
+            status="failed",
+            error_message=message,
+            progress=progress or {"phase": "failed"},
+        )
+
+    def _finish_job(
+        self,
+        job_id: str,
+        status: str,
+        *,
+        result: dict | None = None,
+        progress: dict | None = None,
+        error_message: str | None = None,
+    ):
+        conn = None
+        try:
+            conn = self._get_connection()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE intervention_jobs
+                SET status = %s,
+                    result = %s,
+                    progress = %s,
+                    error_message = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND status IN ('pending', 'processing')
+                """,
+                (status, Json(result) if result is not None else None,
+                 Json(progress or {}), error_message, job_id),
+            )
+            if cur.rowcount != 1:
+                raise JobRepositoryError("Job is missing or already terminal")
+            conn.commit()
+            cur.close()
+        except JobRepositoryError:
+            if conn:
+                conn.rollback()
+            raise
+        except Exception as e:
+            logger.error(f"[JOB_REPO] ❌ Error completing job {job_id}: {str(e)}")
+            if conn:
+                conn.rollback()
+            raise JobRepositoryError("Job store unavailable") from e
+        finally:
+            if conn:
+                conn.close()
 
 
 # Module-level singleton

@@ -84,14 +84,19 @@ class PostgresService:
                     json.dumps(item.SearchQueries or [])
                 ))
             
-            # Use RETURNING id to get assigned IDs
-            execute_values(cur, """
-                INSERT INTO book_contents (book_name, chapter, page, content, search_queries)
-                VALUES %s
-                RETURNING id
-            """, data)
-            
-            ids = [row[0] for row in cur.fetchall()]
+            # execute_values may split a large insert into multiple statements;
+            # fetch RETURNING ids per chunk so every Qdrant point gets its
+            # matching PostgreSQL row id.
+            ids = []
+            chunk_size = 100
+            for start in range(0, len(data), chunk_size):
+                chunk = data[start:start + chunk_size]
+                execute_values(cur, """
+                    INSERT INTO book_contents (book_name, chapter, page, content, search_queries)
+                    VALUES %s
+                    RETURNING id
+                """, chunk)
+                ids.extend(row[0] for row in cur.fetchall())
             conn.commit()
             cur.close()
             logger.info(f"[POSTGRES] ✅ Successfully inserted {len(items)} items")
@@ -100,6 +105,26 @@ class PostgresService:
             logger.error(f"[POSTGRES] ❌ Error inserting items: {str(e)}")
             if conn:
                 conn.rollback()
+            raise
+        finally:
+            if conn:
+                conn.close()
+
+    def delete_book_items(self, postgres_ids: List[int]) -> None:
+        """Compensating cleanup for a failed Qdrant ingestion."""
+        if not postgres_ids:
+            return
+        conn = None
+        try:
+            conn = self._get_connection()
+            cur = conn.cursor()
+            cur.execute("DELETE FROM book_contents WHERE id = ANY(%s)", (postgres_ids,))
+            conn.commit()
+            cur.close()
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"[POSTGRES] ❌ Error deleting ingestion rows: {e}")
             raise
         finally:
             if conn:
