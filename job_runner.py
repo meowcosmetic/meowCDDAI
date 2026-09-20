@@ -145,6 +145,7 @@ class JobRunner:
                            if job_input.get("selected_sources") else {}),
                     },
                     "tone": job_input.get("tone", "giáo viên"),
+                    "revision_notes": job_input.get("revision_notes"),
                 },
             )
             # resp -> {expert_analysis, practical_content, verified_content,

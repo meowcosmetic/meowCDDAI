@@ -44,6 +44,7 @@ class DescribeAsyncRequest(BaseModel):
     context: Optional[dict] = None
     selected_sources: List[dict] = []
     skip_extraction: bool = False
+    revision_notes: Optional[str] = None
 
 
 class JobCreatedResponse(BaseModel):
@@ -109,6 +110,7 @@ async def describe_async(
         "context": req.context,
         "selected_sources": req.selected_sources,
         "skip_extraction": req.skip_extraction,
+        "revision_notes": req.revision_notes,
     }
     if x_user_id:
         input_data["owner_id"] = x_user_id
