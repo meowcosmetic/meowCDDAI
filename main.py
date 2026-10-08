@@ -33,6 +33,17 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+from alarm_emitter import emit_alarm_async
+from fastapi import Request
+
+@app.middleware("http")
+async def auto_alarm_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        emit_alarm_async("meowCDDAI", f"{request.method} {request.url.path}", exc)
+        raise exc
+
 
 # Mount feature routers
 app.include_router(admin_router)
