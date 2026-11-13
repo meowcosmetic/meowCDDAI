@@ -6,6 +6,8 @@ Theo ranh giới kiến trúc (design B.2 + Property 8): meowCDDAI CHỈ điều
   2. Gọi đúng MỘT endpoint cấp cao của meowAI (`/cdd/extract` hoặc
      `/cdd/process-intervention`) qua `call_meow_ai_endpoint`.
   3. Lưu kết quả/lỗi vào job qua `job_repository`.
+  4. Nếu job thất bại và đã khấu trừ Credit (có `billing_reference`), tự động
+     hoàn trả Credit qua `billing_client.refund(...)` (Auto-refund).
 
 Runner KHÔNG chứa logic agent/consensus/batching và KHÔNG gọi raw `/chat`
 (toàn bộ logic gọi model sống trong meowAI). Status chỉ chuyển tiến theo
@@ -18,6 +20,7 @@ import logging
 
 import httpx
 
+from billing_client import billing_client
 from config import Config
 from job_repository import job_repository
 
@@ -58,6 +61,25 @@ async def call_meow_ai_endpoint(path: str, payload: dict) -> dict:
         return resp.json()
 
 
+def _auto_refund_if_needed(job_input: dict, job_id: str, error_msg: str) -> None:
+    """Tự động hoàn trả Credit nếu job đã được pre-charge và gặp lỗi khi thực thi."""
+    owner_id = job_input.get("owner_id")
+    billing_ref = job_input.get("billing_reference")
+    if not owner_id or not billing_ref:
+        return
+
+    try:
+        billing_client.refund(
+            user_id=str(owner_id),
+            request_reference=str(billing_ref),
+            reason=f"Auto-refund due to AI job ({job_id}) failure: {error_msg}",
+        )
+    except Exception as refund_err:
+        logger.error(
+            f"[JOB_RUNNER] ❌ Auto-refund failed for job={job_id}, user={owner_id}, ref={billing_ref}: {refund_err}"
+        )
+
+
 class JobRunner:
     """Background runner điều phối job (không chứa logic model)."""
 
@@ -67,7 +89,7 @@ class JobRunner:
     async def run_extraction(self, job_id: str):
         """Chạy job trích lọc: gọi `POST /cdd/extract` của meowAI.
 
-        Progress: pending → extracting → completed (hoặc failed).
+        Progress: pending → extracting → completed (hoặc failed + auto-refund).
         Requirements: 1.2, 1.3, 6.3.
         """
         job = self.repo.get_job(job_id)
@@ -81,8 +103,8 @@ class JobRunner:
             {"phase": "extracting", "message": "Đang trích lọc nội dung"},
         )
 
+        job_input = job.get("input") or {}
         try:
-            job_input = job.get("input") or {}
             resp = await call_meow_ai_endpoint(
                 "/cdd/extract",
                 {
@@ -98,6 +120,10 @@ class JobRunner:
                 "rounds_used": resp.get("rounds_used"),
                 "low_confidence": resp.get("low_confidence", False),
             }
+            if "billing_reference" in job_input:
+                progress["billing_reference"] = job_input["billing_reference"]
+                progress["charged_amount"] = job_input.get("charged_amount", 0)
+
             complete_job = getattr(self.repo, "complete_job", None)
             if complete_job is not None:
                 complete_job(job_id, resp, progress)
@@ -108,6 +134,7 @@ class JobRunner:
             logger.info(f"[JOB_RUNNER] ✅ Extraction job {job_id} completed")
         except Exception as e:
             logger.error(f"[JOB_RUNNER] ❌ Extraction job {job_id} failed: {str(e)}")
+            _auto_refund_if_needed(job_input, job_id, str(e))
             fail_job = getattr(self.repo, "fail_job", None)
             if fail_job is not None:
                 fail_job(job_id, str(e))
@@ -119,7 +146,7 @@ class JobRunner:
     async def run_description(self, job_id: str):
         """Chạy job sinh mô tả chi tiết: gọi `POST /cdd/process-intervention`.
 
-        Progress: pending → describing → completed (hoặc failed).
+        Progress: pending → describing → completed (hoặc failed + auto-refund).
         Requirements: 1.2, 1.3, 4.3, 6.3.
         """
         job = self.repo.get_job(job_id)
@@ -133,8 +160,8 @@ class JobRunner:
             {"phase": "describing", "message": "Đang sinh mô tả chi tiết"},
         )
 
+        job_input = job.get("input") or {}
         try:
-            job_input = job.get("input") or {}
             resp = await call_meow_ai_endpoint(
                 "/cdd/process-intervention",
                 {
@@ -154,6 +181,10 @@ class JobRunner:
                 "phase": "completed",
                 "low_confidence": resp.get("low_confidence", False),
             }
+            if "billing_reference" in job_input:
+                progress["billing_reference"] = job_input["billing_reference"]
+                progress["charged_amount"] = job_input.get("charged_amount", 0)
+
             complete_job = getattr(self.repo, "complete_job", None)
             if complete_job is not None:
                 complete_job(job_id, resp, progress)
@@ -164,6 +195,7 @@ class JobRunner:
             logger.info(f"[JOB_RUNNER] ✅ Description job {job_id} completed")
         except Exception as e:
             logger.error(f"[JOB_RUNNER] ❌ Description job {job_id} failed: {str(e)}")
+            _auto_refund_if_needed(job_input, job_id, str(e))
             fail_job = getattr(self.repo, "fail_job", None)
             if fail_job is not None:
                 fail_job(job_id, str(e))

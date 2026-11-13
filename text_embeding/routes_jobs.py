@@ -2,11 +2,14 @@
 Job API Router — endpoint async cho pipeline xử lý nội dung can thiệp.
 
 Theo ranh giới kiến trúc (design B.3): meowCDDAI là orchestrator async mỏng.
-Các endpoint ở đây chỉ:
-  1. Validate input + tạo job (status=pending) qua `job_repository`.
-  2. Schedule background task gọi `job_runner.run_extraction/run_description`
+Các endpoint ở đây:
+  1. Validate input + trích xuất định danh (userId, userRole) từ JWT/Header.
+  2. Thực hiện Pre-charge Credit dịch vụ `AI_ANALYSIS` qua `billing_client`.
+     Nếu ví không đủ số dư -> trả HTTP 402 ngay lập tức, không tạo job rác.
+  3. Tạo job (status=pending) qua `job_repository`.
+  4. Schedule background task gọi `job_runner.run_extraction/run_description`
      (FastAPI BackgroundTasks) — KHÔNG chạy pipeline đồng bộ.
-  3. Trả `job_id` ngay (HTTP 202) để frontend poll.
+  5. Trả `job_id` ngay (HTTP 202) để frontend poll.
 
 Endpoints:
   POST /extract-async   -> tạo job extraction, trả {job_id} (202)
@@ -16,15 +19,19 @@ Endpoints:
 Requirements: 1.1, 1.2, 1.5, 1.6, 4.1, 5.4.
 """
 
+import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
 from pydantic import BaseModel
 
-from config import Config
-from job_repository import JobRepositoryError
-
-from job_repository import job_repository
+from billing_client import (
+    BillingServiceError,
+    InsufficientCreditsError,
+    billing_client,
+    extract_actor_from_headers,
+)
+from job_repository import JobRepositoryError, job_repository
 from job_runner import job_runner
 
 router = APIRouter(tags=["Jobs"])
@@ -58,6 +65,35 @@ class JobStatusResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+def _charge_ai_analysis_if_needed(
+    user_id: Optional[str],
+    user_role: str,
+    job_type: str,
+    input_data: dict,
+) -> None:
+    """Khấu trừ Credit cho dịch vụ AI_ANALYSIS nếu request có định danh người dùng."""
+    if not user_id or user_id.upper() == "SYSTEM":
+        return
+
+    req_ref = f"AI_ANALYSIS-{job_type}-{user_id}-{uuid.uuid4().hex[:12]}"
+    try:
+        receipt = billing_client.charge(
+            user_id=user_id,
+            user_role=user_role,
+            service_code="AI_ANALYSIS",
+            request_reference=req_ref,
+            metadata={"job_type": job_type, "service": "meowCDDAI"},
+        )
+        input_data["owner_id"] = user_id
+        input_data["user_role"] = user_role
+        input_data["billing_reference"] = receipt.get("requestReference") or req_ref
+        input_data["charged_amount"] = receipt.get("chargedAmount", 0)
+    except InsufficientCreditsError as e:
+        raise HTTPException(status_code=402, detail=e.message)
+    except BillingServiceError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
 # --------------------------------------------------------------------------- #
 # Endpoints
 # --------------------------------------------------------------------------- #
@@ -69,7 +105,9 @@ class JobStatusResponse(BaseModel):
 async def extract_async(
     req: ExtractAsyncRequest,
     background_tasks: BackgroundTasks,
+    authorization: Optional[str] = Header(default=None),
     x_user_id: Optional[str] = Header(default=None),
+    x_user_role: Optional[str] = Header(default=None),
 ):
     """Tạo job trích lọc và chạy nền; trả `job_id` ngay (202). (Requirements 1.1, 1.2)"""
     if not req.intervention_goal or not req.intervention_goal.strip():
@@ -79,8 +117,13 @@ async def extract_async(
         "intervention_goal": req.intervention_goal,
         "raw_content": req.raw_content,
     }
-    if x_user_id:
-        input_data["owner_id"] = x_user_id
+    user_id, user_role = extract_actor_from_headers(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_user_role=x_user_role,
+    )
+    _charge_ai_analysis_if_needed(user_id, user_role, "extraction", input_data)
+
     job_id = job_repository.create_job("extraction", input_data)
 
     # FastAPI BackgroundTasks hỗ trợ schedule coroutine function: truyền hàm
@@ -98,7 +141,9 @@ async def extract_async(
 async def describe_async(
     req: DescribeAsyncRequest,
     background_tasks: BackgroundTasks,
+    authorization: Optional[str] = Header(default=None),
     x_user_id: Optional[str] = Header(default=None),
+    x_user_role: Optional[str] = Header(default=None),
 ):
     """Tạo job sinh mô tả chi tiết và chạy nền; trả `job_id` ngay (202). (Requirement 4.1)"""
     if not req.confirmed_content or not req.confirmed_content.strip():
@@ -112,8 +157,13 @@ async def describe_async(
         "skip_extraction": req.skip_extraction,
         "revision_notes": req.revision_notes,
     }
-    if x_user_id:
-        input_data["owner_id"] = x_user_id
+    user_id, user_role = extract_actor_from_headers(
+        authorization=authorization,
+        x_user_id=x_user_id,
+        x_user_role=x_user_role,
+    )
+    _charge_ai_analysis_if_needed(user_id, user_role, "description", input_data)
+
     job_id = job_repository.create_job("description", input_data)
 
     background_tasks.add_task(job_runner.run_description, job_id)
@@ -124,6 +174,7 @@ async def describe_async(
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
 async def get_job(
     job_id: str,
+    authorization: Optional[str] = Header(default=None),
     x_user_id: Optional[str] = Header(default=None),
 ):
     """Trả trạng thái job; nếu có owner thì chỉ owner tương ứng được đọc."""
@@ -134,13 +185,13 @@ async def get_job(
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    caller_id, _ = extract_actor_from_headers(
+        authorization=authorization,
+        x_user_id=x_user_id,
+    )
     owner_id = (job.get("input") or {}).get("owner_id")
-    if owner_id and owner_id != x_user_id:
+    if owner_id and owner_id != caller_id:
         raise HTTPException(status_code=404, detail="Job not found")
-    if owner_id is None and x_user_id is not None:
-        # Legacy jobs without ownership metadata remain readable for the
-        # authenticated internal caller; new jobs always persist owner_id.
-        pass
 
     return JobStatusResponse(
         status=job.get("status"),

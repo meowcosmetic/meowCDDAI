@@ -63,10 +63,11 @@ class JobRepository:
         try:
             conn = self._get_connection()
             cur = conn.cursor()
+            cur.execute("CREATE SEQUENCE IF NOT EXISTS intervention_job_id_seq START WITH 1 INCREMENT BY 1;")
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS intervention_jobs (
-                    id            UUID PRIMARY KEY,
+                    id            VARCHAR(32) PRIMARY KEY DEFAULT nextval('intervention_job_id_seq')::text,
                     job_type      TEXT NOT NULL,
                     status        TEXT NOT NULL DEFAULT 'pending',
                     input         JSONB NOT NULL,
@@ -100,19 +101,20 @@ class JobRepository:
     # Create / Read
     # ------------------------------------------------------------------ #
     def create_job(self, job_type: str, input_data: dict) -> str:
-        """Tạo job mới với status=pending, trả về job_id (UUID). (Requirement 5.2)"""
-        job_id = str(uuid.uuid4())
+        """Tạo job mới với status=pending, trả về job_id (số tăng dần). (Requirement 5.2)"""
         conn = None
         try:
             conn = self._get_connection()
             cur = conn.cursor()
             cur.execute(
                 """
-                INSERT INTO intervention_jobs (id, job_type, status, input)
-                VALUES (%s, %s, 'pending', %s)
+                INSERT INTO intervention_jobs (job_type, status, input)
+                VALUES (%s, 'pending', %s)
+                RETURNING id
                 """,
-                (job_id, job_type, Json(input_data or {})),
+                (job_type, Json(input_data or {})),
             )
+            job_id = str(cur.fetchone()[0])
             conn.commit()
             cur.close()
             logger.info(f"[JOB_REPO] ✅ Created job {job_id} (type={job_type})")
